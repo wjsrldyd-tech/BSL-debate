@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 토론 | GPT vs Gemini</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #1a1f2e, #16213e);
+      padding: 1.5rem 2rem;
+      border-bottom: 1px solid #2d3748;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 1.8rem;
+      background: linear-gradient(90deg, #60a5fa, #a78bfa, #34d399);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.3rem;
+    }
+
+    .header p { color: #94a3b8; font-size: 0.9rem; }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+    }
+
+    .card {
+      background: #1e2433;
+      border: 1px solid #2d3748;
+      border-radius: 14px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-title {
+      font-size: 0.8rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 1.1rem;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .form-group label {
+      font-size: 0.82rem;
+      color: #94a3b8;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      background: #0f1117;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      padding: 0.6rem 0.8rem;
+      color: #e2e8f0;
+      font-size: 0.9rem;
+      transition: border-color 0.2s;
+      font-family: inherit;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: #60a5fa;
+    }
+
+    .form-group textarea {
+      resize: vertical;
+      min-height: 66px;
+      line-height: 1.5;
+    }
+
+    .form-group select option { background: #1e2433; }
+
+    .api-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .api-box {
+      background: #0f1117;
+      border-radius: 10px;
+      padding: 1rem;
+      border: 1px solid #2d3748;
+    }
+
+    .api-box.gpt  { border-top: 3px solid #60a5fa; }
+    .api-box.gem  { border-top: 3px solid #34d399; }
+
+    .api-box h3 {
+      font-size: 0.9rem;
+      margin-bottom: 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .api-box.gpt h3 { color: #60a5fa; }
+    .api-box.gem h3 { color: #34d399; }
+
+    .hint {
+      font-size: 0.75rem;
+      color: #475569;
+      margin-top: 0.3rem;
+    }
+
+    .hint a { color: #60a5fa; text-decoration: none; }
+    .hint a:hover { text-decoration: underline; }
+
+    .start-btn {
+      width: 100%;
+      padding: 0.85rem;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border: none;
+      border-radius: 10px;
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    .start-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+    .start-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .restart-btn {
+      background: linear-gradient(135deg, #475569, #334155);
+      margin-top: 0.75rem;
+    }
+
+    .error-msg {
+      background: #450a0a;
+      border: 1px solid #ef4444;
+      color: #fca5a5;
+      border-radius: 8px;
+      padding: 0.7rem 1rem;
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+      display: none;
+    }
+
+    /* Debate Area */
+    .debate-area { display: none; }
+    .debate-area.visible { display: block; }
+
+    .debate-topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1.25rem;
+      gap: 1rem;
+    }
+
+    .topic-label { font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem; }
+    .topic-text { font-weight: 600; font-size: 0.95rem; color: #e2e8f0; }
+
+    .badge-group { display: flex; align-items: center; gap: 0.6rem; white-space: nowrap; }
+
+    .round-text { color: #94a3b8; font-size: 0.85rem; }
+
+    .status-badge {
+      padding: 0.3rem 0.7rem;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+
+    .status-badge.running { background: #065f46; color: #34d399; }
+    .status-badge.done    { background: #1e3a5f; color: #60a5fa; }
+    .status-badge.error   { background: #450a0a; color: #f87171; }
+
+    .messages {
+      display: flex;
+      flex-direction: column;
+      gap: 1.1rem;
+    }
+
+    .msg-wrap {
+      display: flex;
+      gap: 0.75rem;
+      max-width: 84%;
+      animation: fadeUp 0.3s ease;
+    }
+
+    .msg-wrap.gpt { align-self: flex-start; }
+    .msg-wrap.gem { align-self: flex-end; flex-direction: row-reverse; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      flex-shrink: 0;
+      margin-top: 1.3rem;
+    }
+
+    .avatar.gpt { background: #1e3a5f; }
+    .avatar.gem { background: #064e3b; }
+
+    .bubble-inner { flex: 1; min-width: 0; }
+
+    .bubble-meta {
+      font-size: 0.73rem;
+      color: #64748b;
+      margin-bottom: 0.3rem;
+    }
+
+    .msg-wrap.gem .bubble-meta { text-align: right; }
+
+    .bubble-text {
+      background: #1e2433;
+      border-radius: 12px;
+      padding: 0.85rem 1rem;
+      font-size: 0.88rem;
+      line-height: 1.7;
+      border: 1px solid #2d3748;
+      word-break: break-word;
+    }
+
+    .msg-wrap.gpt .bubble-text { border-left: 3px solid #60a5fa; }
+    .msg-wrap.gem .bubble-text { border-right: 3px solid #34d399; }
+
+    .loading-dots {
+      display: inline-flex;
+      gap: 5px;
+      align-items: center;
+      height: 20px;
+    }
+
+    .loading-dots span {
+      width: 7px;
+      height: 7px;
+      background: #94a3b8;
+      border-radius: 50%;
+      animation: bounce 1.2s infinite ease-in-out;
+    }
+
+    .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0.55); opacity: 0.5; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+
+    .conclusion-card {
+      background: linear-gradient(135deg, #1a1f2e, #162032);
+      border: 1px solid #3b82f6;
+      border-radius: 14px;
+      padding: 1.5rem;
+      margin-top: 1.5rem;
+      display: none;
+      animation: fadeUp 0.4s ease;
+    }
+
+    .conclusion-card h3 {
+      color: #60a5fa;
+      margin-bottom: 0.75rem;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .conclusion-card p {
+      color: #cbd5e1;
+      line-height: 1.75;
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+    }
+
+    @media (max-width: 600px) {
+      .api-row, .grid-2 { grid-template-columns: 1fr; }
+      .msg-wrap { max-width: 95%; }
+      .header h1 { font-size: 1.4rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🤖 AI 토론 — GPT vs Gemini</h1>
+  <p>두 AI가 주제에 대해 번갈아 토론하고 결론을 도출합니다</p>
+</div>
+
+<div class="container">
+
+  <!-- ── 설정 카드 ── -->
+  <div class="card" id="setupCard">
+    <div class="card-title">⚙️ 토론 설정</div>
+
+    <div class="form-group" style="margin-bottom: 1rem;">
+      <label>토론 주제</label>
+      <textarea id="topicInput" placeholder="예: 인공지능은 인간의 일자리를 빼앗을 것인가?"></textarea>
+    </div>
+
+    <div class="grid-2" style="margin-bottom: 1.1rem;">
+      <div class="form-group">
+        <label>라운드 수</label>
+        <select id="roundsSelect">
+          <option value="2">2 라운드</option>
+          <option value="3" selected>3 라운드</option>
+          <option value="4">4 라운드</option>
+          <option value="5">5 라운드</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>토론 방식</label>
+        <select id="modeSelect">
+          <option value="freeform">자유 토론 (다양한 관점 교환)</option>
+          <option value="debate">찬반 토론 (GPT=찬성 / Gemini=반대)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="api-row">
+      <div class="api-box gpt">
+        <h3>🔵 ChatGPT (OpenAI)</h3>
+        <div class="form-group">
+          <label>API Key</label>
+          <input type="password" id="openaiKey" placeholder="sk-...">
+          <div class="hint">발급: <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com/api-keys</a></div>
+        </div>
+        <div class="form-group" style="margin-top: 0.8rem;">
+          <label>모델</label>
+          <select id="gptModel">
+            <option value="gpt-5.4-nano" selected>gpt-5.4-nano (최저가)</option>
+            <option value="gpt-5.4-mini">gpt-5.4-mini (저렴·품질 균형)</option>
+            <option value="gpt-4o-mini">gpt-4o-mini (4o 세대)</option>
+            <option value="gpt-4o">gpt-4o</option>
+            <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="api-box gem">
+        <h3>🟢 Gemini (Google)</h3>
+        <div class="form-group">
+          <label>API Key</label>
+          <input type="password" id="geminiKey" placeholder="AIza...">
+          <div class="hint">발급: <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a></div>
+        </div>
+        <div class="form-group" style="margin-top: 0.8rem;">
+          <label>모델</label>
+          <select id="geminiModel">
+            <option value="gemini-2.5-flash" selected>gemini-2.5-flash (권장·빠름)</option>
+            <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (저렴)</option>
+            <option value="gemini-2.5-pro">gemini-2.5-pro (고품질)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <button class="start-btn" id="startBtn" onclick="startDebate()">
+      🚀 토론 시작
+    </button>
+  </div>
+
+  <!-- ── 토론 영역 ── -->
+  <div class="debate-area" id="debateArea">
+
+    <div class="debate-topbar">
+      <div>
+        <div class="topic-label">토론 주제</div>
+        <div class="topic-text" id="topicDisplay"></div>
+      </div>
+      <div class="badge-group">
+        <span class="round-text" id="roundDisplay"></span>
+        <span class="status-badge running" id="statusBadge">진행 중</span>
+      </div>
+    </div>
+
+    <div class="messages" id="messages"></div>
+
+    <div class="conclusion-card" id="conclusionCard">
+      <h3>📋 토론 결론 (GPT 정리)</h3>
+      <p id="conclusionText"></p>
+    </div>
+
+    <button class="start-btn restart-btn" id="restartBtn"
+            style="display:none;" onclick="restart()">
+      🔄 새 토론 시작
+    </button>
+
+  </div>
+</div>
+
+<script>
+  /* 로컬에서만 사용: 아래에 키를 넣으면 입력란에 자동 반영됩니다.
+     GitHub 등에 올리지 마세요. 노출 시 즉시 키를 폐기하고 새로 발급하세요. */
+  const HARDCODED_API_KEYS = {
+    openai: '',
+    gemini: ''
+  };
+
+  function applyHardcodedKeys() {
+    if (HARDCODED_API_KEYS.openai) {
+      document.getElementById('openaiKey').value = HARDCODED_API_KEYS.openai;
+    }
+    if (HARDCODED_API_KEYS.gemini) {
+      document.getElementById('geminiKey').value = HARDCODED_API_KEYS.gemini;
+    }
+  }
+  applyHardcodedKeys();
+
+  /* ────────────────────────────────
+     상태
+  ──────────────────────────────── */
+  let debateHistory = [];
+  let aborted = false;
+
+  /* ────────────────────────────────
+     유틸
+  ──────────────────────────────── */
+  function showError(msg) {
+    const el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+  function hideError() {
+    document.getElementById('errorMsg').style.display = 'none';
+  }
+
+  function esc(t) {
+    return t
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+  }
+
+  /* ────────────────────────────────
+     메시지 버블
+  ──────────────────────────────── */
+  function addBubble(speaker, text, roundLabel, isLoading = false) {
+    const container = document.getElementById('messages');
+    const wrap = document.createElement('div');
+    wrap.className = `msg-wrap ${speaker}`;
+    if (isLoading) wrap.id = 'loading-bubble';
+
+    const emoji  = speaker === 'gpt' ? '🔵' : '🟢';
+    const name   = speaker === 'gpt' ? 'ChatGPT' : 'Gemini';
+    const body   = isLoading
+      ? `<div class="loading-dots"><span></span><span></span><span></span></div>`
+      : esc(text);
+
+    wrap.innerHTML = `
+      <div class="avatar ${speaker}">${emoji}</div>
+      <div class="bubble-inner">
+        <div class="bubble-meta">${name} · ${roundLabel}</div>
+        <div class="bubble-text">${body}</div>
+      </div>`;
+
+    container.appendChild(wrap);
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    return wrap;
+  }
+
+  function removeLoading() {
+    const el = document.getElementById('loading-bubble');
+    if (el) el.remove();
+  }
+
+  /* ────────────────────────────────
+     API 호출
+  ──────────────────────────────── */
+  async function callGPT(systemPrompt, userMessage, model, key) {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: userMessage  }
+        ],
+        max_completion_tokens: 2048,
+        temperature: 0.8
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(`ChatGPT 오류: ${err.error?.message || res.status}`);
+    }
+    return (await res.json()).choices[0].message.content.trim();
+  }
+
+  async function callGemini(prompt, model, key) {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 4096, temperature: 0.8 }
+        })
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(`Gemini 오류: ${err.error?.message || res.status}`);
+    }
+    const data = await res.json();
+    return data.candidates[0].content.parts[0].text.trim();
+  }
+
+  /* ────────────────────────────────
+     시스템 프롬프트
+  ──────────────────────────────── */
+  function buildGPTSystem(topic, mode) {
+    const role = mode === 'debate'
+      ? '찬성 측 (주제에 동의하는 입장으로 주장하세요)'
+      : '자유 탐구 (다양한 관점을 열린 자세로 탐색하세요)';
+    return `당신은 AI 토론 대회에 "ChatGPT"로 참여하고 있습니다.
+토론 주제: ${topic}
+당신의 역할: ${role}
+규칙:
+- 상대방(Gemini)의 주장을 읽고 논리적으로 반응하세요.
+- 각 발언은 4~5문장, 간결하고 명확하게 하세요.
+- 근거와 예시를 들어 설득력을 높이세요.
+- 반드시 한국어로 답변하세요.`;
+  }
+
+  function buildGeminiSystem(topic, mode) {
+    const role = mode === 'debate'
+      ? '반대 측 (주제에 반대하는 입장으로 주장하세요)'
+      : '자유 탐구 (다양한 관점을 열린 자세로 탐색하세요)';
+    return `당신은 AI 토론 대회에 "Gemini"로 참여하고 있습니다.
+토론 주제: ${topic}
+당신의 역할: ${role}
+규칙:
+- 상대방(ChatGPT)의 주장을 읽고 논리적으로 반응하세요.
+- 각 발언은 4~5문장, 간결하고 명확하게 하세요.
+- 근거와 예시를 들어 설득력을 높이세요.
+- 반드시 한국어로 답변하세요.`;
+  }
+
+  function historyText() {
+    return debateHistory
+      .map(h => `[${h.name} — ${h.roundLabel}]: ${h.text}`)
+      .join('\n\n');
+  }
+
+  /* ────────────────────────────────
+     메인 토론 루프
+  ──────────────────────────────── */
+  async function startDebate() {
+    hideError();
+
+    const topic      = document.getElementById('topicInput').value.trim();
+    const openaiKey  = document.getElementById('openaiKey').value.trim();
+    const geminiKey  = document.getElementById('geminiKey').value.trim();
+    const rounds     = parseInt(document.getElementById('roundsSelect').value);
+    const mode       = document.getElementById('modeSelect').value;
+    const gptModel   = document.getElementById('gptModel').value;
+    const geminiMdl  = document.getElementById('geminiModel').value;
+
+    if (!topic)     return showError('토론 주제를 입력해주세요.');
+    if (!openaiKey) return showError('OpenAI API 키를 입력해주세요.');
+    if (!geminiKey) return showError('Google AI API 키를 입력해주세요.');
+
+    aborted = false;
+    debateHistory = [];
+
+    const btn = document.getElementById('startBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ 토론 진행 중...';
+
+    document.getElementById('debateArea').classList.add('visible');
+    document.getElementById('topicDisplay').textContent = topic;
+    document.getElementById('messages').innerHTML = '';
+    document.getElementById('conclusionCard').style.display = 'none';
+    document.getElementById('restartBtn').style.display = 'none';
+    document.getElementById('statusBadge').className = 'status-badge running';
+    document.getElementById('statusBadge').textContent = '진행 중';
+
+    const gptSys = buildGPTSystem(topic, mode);
+    const gemSys = buildGeminiSystem(topic, mode);
+
+    try {
+      for (let r = 1; r <= rounds; r++) {
+        if (aborted) break;
+        const label = `${r} / ${rounds} 라운드`;
+        document.getElementById('roundDisplay').textContent = label;
+
+        /* ── GPT 발언 ── */
+        addBubble('gpt', '', label, true);
+        const gptUserMsg = r === 1
+          ? `주제: "${topic}"\n\n${mode === 'debate' ? '찬성 측으로서 첫 번째 주장을 시작하세요.' : '이 주제에 대한 첫 번째 의견을 자유롭게 제시하세요.'}`
+          : `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
+
+        const gptText = await callGPT(gptSys, gptUserMsg, gptModel, openaiKey);
+        removeLoading();
+        addBubble('gpt', gptText, label);
+        debateHistory.push({ name: 'ChatGPT', roundLabel: label, text: gptText });
+
+        if (aborted) break;
+
+        /* ── Gemini 발언 ── */
+        addBubble('gem', '', label, true);
+        const gemPrompt = r === 1
+          ? `${gemSys}\n\n주제: "${topic}"\n\nChatGPT의 첫 번째 주장:\n${gptText}\n\n${mode === 'debate' ? '반대 측으로서 반박하세요.' : 'ChatGPT 의견에 반응하고 당신의 관점을 제시하세요.'}`
+          : `${gemSys}\n\n지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
+
+        const gemText = await callGemini(gemPrompt, geminiMdl, geminiKey);
+        removeLoading();
+        addBubble('gem', gemText, label);
+        debateHistory.push({ name: 'Gemini', roundLabel: label, text: gemText });
+      }
+
+      if (!aborted) {
+        /* ── 결론 도출 ── */
+        document.getElementById('roundDisplay').textContent = '결론 정리 중...';
+        addBubble('gpt', '', '결론', true);
+
+        const conclusionPrompt = `지금까지의 토론 내용:\n\n${historyText()}\n\n위 토론을 바탕으로 다음 형식으로 최종 결론을 작성하세요:
+1. 양측의 핵심 주장 요약
+2. 공통점 및 남아 있는 이견
+3. 종합적인 결론 또는 시사점
+(총 6~8문장으로 객관적이고 균형 있게 작성)`;
+
+        const conclusion = await callGPT(
+          '당신은 AI 토론의 중립적인 정리자입니다. 토론 내용을 객관적으로 요약하고 결론을 도출하세요. 한국어로 응답하세요.',
+          conclusionPrompt,
+          gptModel,
+          openaiKey
+        );
+
+        removeLoading();
+        document.getElementById('conclusionText').textContent = conclusion;
+        document.getElementById('conclusionCard').style.display = 'block';
+        document.getElementById('conclusionCard').scrollIntoView({ behavior: 'smooth' });
+
+        document.getElementById('statusBadge').className = 'status-badge done';
+        document.getElementById('statusBadge').textContent = '완료';
+        document.getElementById('roundDisplay').textContent = `${document.getElementById('roundsSelect').value} / ${document.getElementById('roundsSelect').value} 라운드`;
+      }
+
+    } catch (err) {
+      removeLoading();
+      showError(err.message);
+      document.getElementById('statusBadge').className = 'status-badge error';
+      document.getElementById('statusBadge').textContent = '오류';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🚀 토론 시작';
+      document.getElementById('restartBtn').style.display = 'block';
+    }
+  }
+
+  function restart() {
+    aborted = true;
+    debateHistory = [];
+    document.getElementById('debateArea').classList.remove('visible');
+    document.getElementById('messages').innerHTML = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+</script>
+</body>
+</html>

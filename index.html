@@ -828,6 +828,7 @@
 회의 안건: ${topic}
 당신의 역할: 논거를 넓게 탐색하고, 더 나은 결론을 향해 의견을 수렴하는 분석가
 규칙:
+- 자신의 논리와 전제는 분명히 하되, 더 타당한 근거가 제시되면 입장을 수정·완화하는 것을 두려워하지 마세요.
 - 이미 제시된 다른 참가자(분석가 B·C 등)의 발언에 사실 오류, 논리적 비약, 근거 부족이 있으면 반드시 "[반박]"으로 시작해 이유와 근거를 명확히 제시하세요.
 - 반박 후에는 반드시 올바른 대안이나 수정 의견을 제안하세요.
 - 동의할 수 있는 부분은 인정하고, 발전적으로 보완하세요.
@@ -854,6 +855,7 @@
 회의 안건: ${topic}
 당신의 역할: 실무적 관점에서 검토하고, 상대 의견을 발전시켜 최선의 결론을 이끄는 분석가
 규칙:
+- 실무·현장에서 문제가 될 수 있다고 판단되면 소극적으로 넘기지 말고 "[반박]"으로 지적하고, 실행 가능한 대안을 구체적으로 제시하세요.
 - 다른 참가자(분석가 A·C 등)의 발언에 사실 오류, 논리적 비약, 근거 부족이 있으면 반드시 "[반박]"으로 시작해 이유와 근거를 명확히 제시하세요.
 - 반박 후에는 반드시 올바른 대안이나 수정 의견을 제안하세요.
 - 동의할 수 있는 부분은 인정하고, 발전적으로 보완하세요.
@@ -880,6 +882,7 @@
 회의 안건: ${topic}
 당신의 역할: ChatGPT(분석가 A)와 Gemini(분석가 B)의 발언을 반영해 종합·조정하고, 합의에 도움이 되는 제안을 하는 분석가
 규칙:
+- 실행이 어렵거나 현실성이 부족한 결론이 보이면, 무리한 비난 대신 실행 가능성을 점검하고 더 현실적인 방향을 제안하세요.
 - 먼저 A와 B의 논점을 각각 한 문장 이내로 짚은 뒤, 종합·보완·조정 의견을 제시하세요.
 - 사실 오류나 논리 비약이 있으면 "[반박]"으로 지적하고 대안을 제안하세요.
 - 동의할 부분은 인정하고, 목표는 더 나은 결론에 도달하는 것입니다.
@@ -908,6 +911,17 @@
     return debateHistory
       .map(h => `[${h.name} — ${h.roundLabel}]: ${h.text}`)
       .join('\n\n');
+  }
+
+  /** 회의 모드: 라운드별 초반·중반·마무리 흐름 (시스템은 모르므로 사용자 메시지에만 붙임) */
+  function meetingPhaseHint(r, rounds) {
+    if (r === 1) {
+      return '\n\n[회의 단계 — 초반] 안건과 핵심 논점을 분명히 하세요. 필요하면 건설적 이견을 드러내도 되며, 첫 라운드에서 모든 쟁점을 수렴할 필요는 없습니다.';
+    }
+    if (r === rounds) {
+      return '\n\n[회의 단계 — 마무리] 이견을 좁히고 실행 가능한 결론 쪽으로 모으세요. 실행·효과·리스크의 체계적 정리는 회의 종료 후 요약 보고서에서 합니다.';
+    }
+    return '\n\n[회의 단계 — 중반] 이견은 근거와 함께 다루고, 반박에는 실행 가능한 대안을 함께 제시하세요.';
   }
 
   /* ────────────────────────────────
@@ -976,6 +990,9 @@
             ? `주제: "${topic}"\n\n${mode === 'debate' ? '찬성 측으로서 첫 번째 주장을 시작하세요.' : '이 주제에 대한 첫 번째 의견을 자유롭게 제시하세요.'}`
             : `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
         }
+        if (mode === 'meeting') {
+          gptUserMsg += meetingPhaseHint(r, rounds);
+        }
 
         const gptText = await callGPT(gptSys, gptUserMsg, gptModel, openaiKey);
         removeLoading();
@@ -999,6 +1016,9 @@
           gemPrompt = r === 1
             ? `${gemSys}\n\n주제: "${topic}"\n\nChatGPT의 첫 번째 주장:\n${gptText}\n\n${mode === 'debate' ? '반대 측으로서 반박하세요.' : 'ChatGPT 의견에 반응하고 당신의 관점을 제시하세요.'}`
             : `${gemSys}\n\n지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
+        }
+        if (mode === 'meeting') {
+          gemPrompt += meetingPhaseHint(r, rounds);
         }
 
         const gemText = await callGeminiWithRetry(gemPrompt, geminiMdl, geminiKey, label);
@@ -1037,6 +1057,9 @@
               claudeUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
             }
           }
+          if (mode === 'meeting') {
+            claudeUserMsg += meetingPhaseHint(r, rounds);
+          }
 
           const claudeText = await callClaudeWithRetry(claudeSys, claudeUserMsg, claudeModel, anthropicKey, label);
           removeLoading();
@@ -1055,7 +1078,7 @@
           conclusionSystemPrompt = participants3
             ? '당신은 회의 결과를 경영진에게 보고하는 실무 담당자입니다. ChatGPT·Gemini·Claude 세 참가자의 회의 내용을 토대로 명확한 결론과 실행 가능한 권고안을 작성하세요. 반드시 한국어로 응답하세요.'
             : '당신은 회의 결과를 경영진에게 보고하는 실무 담당자입니다. 회의 내용을 토대로 명확한 결론과 실행 가능한 권고안을 작성하세요. 반드시 한국어로 응답하세요.';
-          conclusionPrompt = `회의 안건: ${topic}\n\n회의 내용:\n\n${historyText()}\n\n위 회의 결과를 바탕으로 다음 형식의 보고서를 작성하세요:\n1. 배경 및 핵심 논의 사항\n2. 주요 검토 내용 (합의점 및 남은 쟁점)\n3. 최종 결론 및 권고안\n4. 향후 액션 아이템\n(간결하고 실무적인 보고서 어투로 작성)`;
+          conclusionPrompt = `회의 안건: ${topic}\n\n회의 내용:\n\n${historyText()}\n\n위 회의를 바탕으로 경영진 보고용 요약을 작성하세요. 다음 항목을 빠짐없이 다루되 중복은 줄이고 실무 톤으로 작성하세요:\n1. 배경 및 핵심 논의 사항\n2. 합의된 점과 남은 쟁점\n3. 실행 방안 (구체적 행동·담당·시기 등, 가능한 범위에서)\n4. 기대 효과\n5. 리스크 및 보완점\n6. 향후 액션 아이템 (실행 가능한 항목)`;
           document.getElementById('conclusionCard').querySelector('h3').textContent = '📋 회의 결과 보고서';
         } else {
           conclusionSystemPrompt = '당신은 AI 토론의 중립적인 정리자입니다. 토론 내용을 객관적으로 요약하고 결론을 도출하세요. 한국어로 응답하세요.';

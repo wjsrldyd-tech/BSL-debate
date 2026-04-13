@@ -1604,6 +1604,20 @@
   /* ────────────────────────────────
      히스토리 저장 / 불러오기
   ──────────────────────────────── */
+  const HISTORY_API_BASE = (() => {
+    const host = window.location.hostname;
+    const isLocal =
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '::1' ||
+      host.endsWith('.local');
+    return isLocal ? 'https://bsl-debate.vercel.app' : '';
+  })();
+
+  function historyApi(path) {
+    return `${HISTORY_API_BASE}${path}`;
+  }
+
   async function saveConversation() {
     if (!debateHistory.length) return alert('저장할 대화 내용이 없습니다.');
     const btn = document.getElementById('saveBtn');
@@ -1622,7 +1636,7 @@
           conclusion
         }
       };
-      const res = await fetch('/api/conversations', {
+      const res = await fetch(historyApi('/api/conversations'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1644,7 +1658,7 @@
   async function loadHistoryList() {
     const ul = document.getElementById('historyList');
     try {
-      const res = await fetch('/api/conversations');
+      const res = await fetch(historyApi('/api/conversations'));
       if (!res.ok) throw new Error(res.status);
       const list = await res.json();
       ul.innerHTML = '';
@@ -1669,7 +1683,7 @@
 
   async function loadConversation(id) {
     try {
-      const res = await fetch('/api/conversations/' + id);
+      const res = await fetch(historyApi('/api/conversations/' + id));
       if (!res.ok) throw new Error(res.status);
       const session = await res.json();
       if (!session) throw new Error('데이터 없음');
@@ -1733,7 +1747,7 @@
     if (!confirm('이 히스토리를 삭제할까요?')) return;
     btn.disabled = true;
     try {
-      const res = await fetch('/api/conversations/' + id, { method: 'DELETE' });
+      const res = await fetch(historyApi('/api/conversations/' + id), { method: 'DELETE' });
       if (!res.ok) throw new Error(res.status);
       await loadHistoryList();
     } catch (e) {

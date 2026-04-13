@@ -487,6 +487,78 @@
       .msg-wrap { max-width: 95%; }
       .header h1 { font-size: 1.4rem; }
     }
+
+    /* ── 히스토리 ── */
+    .history-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      max-height: 280px;
+      overflow-y: auto;
+      padding-right: 0.2rem;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #0f1117;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      padding: 0.45rem 0.7rem;
+      transition: border-color 0.15s;
+    }
+    .history-item:hover { border-color: #60a5fa; }
+
+    .history-load-btn {
+      flex: 1;
+      background: none;
+      border: none;
+      color: #e2e8f0;
+      font-size: 0.83rem;
+      text-align: left;
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding: 0;
+    }
+    .history-load-btn:hover { color: #60a5fa; }
+
+    .history-date {
+      font-size: 0.71rem;
+      color: #64748b;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .history-del-btn {
+      background: none;
+      border: none;
+      color: #475569;
+      cursor: pointer;
+      font-size: 0.78rem;
+      flex-shrink: 0;
+      padding: 0.15rem 0.3rem;
+      border-radius: 4px;
+      transition: color 0.15s;
+    }
+    .history-del-btn:hover { color: #f87171; }
+
+    .save-btn {
+      background: linear-gradient(135deg, #059669, #047857);
+      margin-top: 0.75rem;
+      flex-shrink: 0;
+    }
+    .save-btn:hover:not(:disabled) { opacity: 0.88; }
+
+    .history-empty {
+      color: #64748b;
+      font-size: 0.82rem;
+      padding: 0.4rem 0;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -601,6 +673,12 @@
       🚀 토론 시작
     </button>
   </div>
+  <div class="card" id="historyCard" style="margin-top:0;">
+    <div class="card-title">📚 저장된 히스토리</div>
+    <ul id="historyList" class="history-list">
+      <li class="history-empty">불러오는 중...</li>
+    </ul>
+  </div>
   </aside>
 
   <!-- ── 우측: 토론 ── -->
@@ -653,6 +731,11 @@
         반박 추가 후 재개
       </button>
     </div>
+
+    <button class="start-btn save-btn" id="saveBtn"
+            style="display:none;" onclick="saveConversation()">
+      💾 이 토론 저장
+    </button>
 
     <button class="start-btn restart-btn" id="restartBtn"
             style="display:none;" onclick="restart()">
@@ -1209,6 +1292,7 @@
     document.getElementById('messages').innerHTML = '';
     document.getElementById('conclusionCard').style.display = 'none';
     document.getElementById('restartBtn').style.display = 'none';
+    document.getElementById('saveBtn').style.display = 'none';
     document.getElementById('statusBadge').className = 'status-badge running';
     document.getElementById('statusBadge').textContent = '진행 중';
 
@@ -1245,7 +1329,7 @@
         const gptText = await callGPT(gptSys, gptUserMsg, gptModel, openaiKey);
         removeLoading();
         addBubble('gpt', gptText, label);
-        debateHistory.push({ name: participantName('gpt', mode), roundLabel: label, text: gptText });
+        debateHistory.push({ speaker: 'gpt', name: participantName('gpt', mode), roundLabel: label, text: gptText });
 
         if (aborted) break;
 
@@ -1272,7 +1356,7 @@
         const gemText = await callGeminiWithRetry(gemPrompt, geminiMdl, geminiKey, label);
         removeLoading();
         addBubble('gem', gemText, label);
-        debateHistory.push({ name: participantName('gem', mode), roundLabel: label, text: gemText });
+        debateHistory.push({ speaker: 'gem', name: participantName('gem', mode), roundLabel: label, text: gemText });
 
         if (aborted) break;
 
@@ -1312,7 +1396,7 @@
           const claudeText = await callClaudeWithRetry(claudeSys, claudeUserMsg, claudeModel, anthropicKey, label);
           removeLoading();
           addBubble('claude', claudeText, label);
-          debateHistory.push({ name: participantName('claude', mode), roundLabel: label, text: claudeText });
+          debateHistory.push({ speaker: 'claude', name: participantName('claude', mode), roundLabel: label, text: claudeText });
         }
       }
 
@@ -1334,6 +1418,7 @@
       btn.disabled = false;
       btn.textContent = '🚀 토론 시작';
       document.getElementById('restartBtn').style.display = 'block';
+      if (!aborted) document.getElementById('saveBtn').style.display = 'block';
     }
   }
 
@@ -1370,7 +1455,7 @@
     const participants3 = currentSessionParticipants3;
 
     const userLabel = mode === 'meeting' ? '소장 반박' : '사용자 반박';
-    debateHistory.push({ name: participantName('user', mode), roundLabel: userLabel, text: userText });
+    debateHistory.push({ speaker: 'user', name: participantName('user', mode), roundLabel: userLabel, text: userText });
     addUserBubble(userText, userLabel);
 
     const gptSys = buildGPTSystem(topic, mode);
@@ -1415,7 +1500,7 @@
         const gptText = await callGPT(gptSys, gptUserMsg, gptModel, openaiKey);
         removeLoading();
         addBubble('gpt', gptText, label);
-        debateHistory.push({ name: participantName('gpt', mode), roundLabel: label, text: gptText });
+        debateHistory.push({ speaker: 'gpt', name: participantName('gpt', mode), roundLabel: label, text: gptText });
 
         if (aborted) break;
 
@@ -1439,7 +1524,7 @@
         const gemText = await callGeminiWithRetry(gemPrompt, geminiMdl, geminiKey, label);
         removeLoading();
         addBubble('gem', gemText, label);
-        debateHistory.push({ name: participantName('gem', mode), roundLabel: label, text: gemText });
+        debateHistory.push({ speaker: 'gem', name: participantName('gem', mode), roundLabel: label, text: gemText });
 
         if (aborted) break;
 
@@ -1474,7 +1559,7 @@
           const claudeText = await callClaudeWithRetry(claudeSys, claudeUserMsg, claudeModel, anthropicKey, label);
           removeLoading();
           addBubble('claude', claudeText, label);
-          debateHistory.push({ name: participantName('claude', mode), roundLabel: label, text: claudeText });
+          debateHistory.push({ speaker: 'claude', name: participantName('claude', mode), roundLabel: label, text: claudeText });
         }
       }
 
@@ -1498,6 +1583,7 @@
     } finally {
       contBtn.disabled = false;
       contBtn.textContent = '반박 추가 후 재개';
+      if (!aborted) document.getElementById('saveBtn').style.display = 'block';
     }
   }
 
@@ -1514,6 +1600,150 @@
     document.getElementById('userRebuttalInput').value = '';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
+
+  /* ────────────────────────────────
+     히스토리 저장 / 불러오기
+  ──────────────────────────────── */
+  async function saveConversation() {
+    if (!debateHistory.length) return alert('저장할 대화 내용이 없습니다.');
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ 저장 중...';
+    try {
+      const title = (currentSessionTopic || '무제').slice(0, 60);
+      const conclusion = document.getElementById('conclusionText').textContent || '';
+      const payload = {
+        title,
+        data: {
+          topic: currentSessionTopic,
+          mode: currentSessionMode,
+          participants3: currentSessionParticipants3,
+          history: debateHistory,
+          conclusion
+        }
+      };
+      const res = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('저장 실패 (' + res.status + ')');
+      btn.textContent = '✅ 저장됨';
+      await loadHistoryList();
+      setTimeout(() => {
+        btn.textContent = '💾 이 토론 저장';
+        btn.disabled = false;
+      }, 2000);
+    } catch (e) {
+      alert('저장 오류: ' + e.message);
+      btn.textContent = '💾 이 토론 저장';
+      btn.disabled = false;
+    }
+  }
+
+  async function loadHistoryList() {
+    const ul = document.getElementById('historyList');
+    try {
+      const res = await fetch('/api/conversations');
+      if (!res.ok) throw new Error(res.status);
+      const list = await res.json();
+      ul.innerHTML = '';
+      if (!Array.isArray(list) || list.length === 0) {
+        ul.innerHTML = '<li class="history-empty">저장된 히스토리가 없습니다.</li>';
+        return;
+      }
+      list.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'history-item';
+        const date = new Date(item.created_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' });
+        li.innerHTML = `
+          <button class="history-load-btn" title="${item.title}" onclick="loadConversation('${item.id}')">${item.title}</button>
+          <span class="history-date">${date}</span>
+          <button class="history-del-btn" title="삭제" onclick="deleteConversation('${item.id}', this)">✕</button>`;
+        ul.appendChild(li);
+      });
+    } catch (e) {
+      ul.innerHTML = '<li class="history-empty">불러오기 실패</li>';
+    }
+  }
+
+  async function loadConversation(id) {
+    try {
+      const res = await fetch('/api/conversations/' + id);
+      if (!res.ok) throw new Error(res.status);
+      const session = await res.json();
+      if (!session) throw new Error('데이터 없음');
+
+      const d = session.data;
+      debateHistory = d.history || [];
+      currentSessionTopic = d.topic || '';
+      currentSessionMode = d.mode || 'freeform';
+      currentSessionParticipants3 = !!d.participants3;
+
+      /* UI 설정 동기화 */
+      document.getElementById('topicInput').value = currentSessionTopic;
+      document.getElementById('modeSelect').value = currentSessionMode;
+      document.getElementById('participantCount').value = currentSessionParticipants3 ? '3' : '2';
+      syncParticipantUi();
+
+      /* 토론 영역 초기화 */
+      document.getElementById('debateColumn').classList.add('debate-active');
+      document.getElementById('debateArea').classList.add('visible');
+      document.getElementById('debatePlaceholder') && (document.getElementById('debatePlaceholder').style.display = 'none');
+      document.getElementById('topicDisplay').textContent = currentSessionTopic;
+      document.querySelector('.topic-label').textContent = currentSessionMode === 'meeting' ? '회의 안건' : '토론 주제';
+      document.getElementById('messages').innerHTML = '';
+      document.getElementById('conclusionCard').style.display = 'none';
+      document.getElementById('statusBadge').className = 'status-badge done';
+      document.getElementById('statusBadge').textContent = '완료';
+      document.getElementById('roundDisplay').textContent = '불러옴';
+
+      /* 메시지 버블 재구성 */
+      debateHistory.forEach(h => {
+        const sp = h.speaker || 'gpt';
+        if (sp === 'user') {
+          addUserBubble(h.text, h.roundLabel);
+        } else {
+          addBubble(sp, h.text, h.roundLabel);
+        }
+      });
+
+      /* 결론 복원 */
+      if (d.conclusion) {
+        document.getElementById('conclusionText').textContent = d.conclusion;
+        document.getElementById('conclusionCard').style.display = 'block';
+        document.getElementById('conclusionCard').querySelector('h3').textContent =
+          currentSessionMode === 'meeting' ? '📋 벧엘소프트랩 회의 결과 보고서' : '📋 토론 결론 (GPT 정리)';
+      }
+
+      /* 재개/저장 버튼 */
+      document.getElementById('restartBtn').style.display = 'block';
+      document.getElementById('saveBtn').style.display = 'none'; /* 이미 저장된 세션 */
+      document.getElementById('userInterventionCard').style.display = 'block';
+      document.getElementById('userRebuttalInput').value = '';
+      hideError();
+
+      document.getElementById('debateArea').scrollIntoView({ behavior: 'smooth' });
+    } catch (e) {
+      alert('불러오기 오류: ' + e.message);
+    }
+  }
+
+  async function deleteConversation(id, btn) {
+    if (!confirm('이 히스토리를 삭제할까요?')) return;
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/conversations/' + id, { method: 'DELETE' });
+      if (!res.ok) throw new Error(res.status);
+      await loadHistoryList();
+    } catch (e) {
+      alert('삭제 오류: ' + e.message);
+      btn.disabled = false;
+    }
+  }
+
+  /* 페이지 로드 시 히스토리 목록 초기화 */
+  loadHistoryList();
 </script>
 </body>
 </html>

@@ -531,10 +531,10 @@
     <div class="form-group" style="margin-bottom: 1.1rem;">
       <label>참가자</label>
       <select id="participantCount">
-        <option value="2">2명 (ChatGPT → Gemini)</option>
-        <option value="3" selected>3명 (ChatGPT → Gemini → Claude, 순환)</option>
+        <option value="2">2명 (ChatGPT → Gemini / 회의: 기획 → 홍보)</option>
+        <option value="3" selected>3명 (순환 / 회의: 기획 → 홍보 → 개발)</option>
       </select>
-      <div class="hint">3명일 때 매 라운드마다 A→B→C 순으로 발언하며, 뒷순서는 앞선 발언을 반영합니다.</div>
+      <div class="hint">3명일 때 매 라운드마다 순서대로 발언하며, 뒷순서는 앞선 발언을 반영합니다. <strong>회의 모드</strong>에서는 화면에 기획팀장 → 홍보팀장 → 개발팀장으로 표시됩니다.</div>
     </div>
 
     <div class="api-row api-row-3" id="apiKeysRow">
@@ -629,8 +629,8 @@
     </div>
 
     <div class="user-intervention-card" id="userInterventionCard">
-      <h3>✋ 사용자 반박 · 추가 의견</h3>
-      <p class="hint-line">결론에 동의하지 않거나 현실적인 반박을 넣으면, 아래 문구가 회의 기록에 추가된 뒤 AI들이 추가 라운드를 진행합니다. 이전 대화는 유지됩니다.</p>
+      <h3>✋ 반박 · 추가 의견</h3>
+      <p class="hint-line">결론에 동의하지 않거나 반박을 넣으면 기록에 추가된 뒤 AI가 추가 라운드를 진행합니다. <strong>회의 모드</strong>에서는 본인 발언이 <strong>소장</strong>으로 표시됩니다. 이전 대화는 유지됩니다.</p>
       <div class="form-group">
         <label for="userRebuttalInput">반박 또는 추가 전제</label>
         <textarea id="userRebuttalInput" placeholder="예: 숙제는 학원에 오지 않는 날 하는 것이 전제인데, 학원 내 완료는 수업 연장일 뿐이라…" style="min-height: 100px;"></textarea>
@@ -725,7 +725,7 @@
   ──────────────────────────────── */
   let debateHistory = [];
   let aborted = false;
-  /** 재개(사용자 반박) 시 동일 세션으로 쓰는 설정 — 토론 시작 시 설정, 새 토론 시 초기화 */
+  /** 재개(소장/사용자 반박) 시 동일 세션으로 쓰는 설정 — 토론 시작 시 설정, 새 토론 시 초기화 */
   let currentSessionTopic = '';
   let currentSessionMode = '';
   let currentSessionParticipants3 = false;
@@ -750,6 +750,19 @@
       .replace(/\n/g, '<br>');
   }
 
+  /**
+   * 회의 모드: 벧엘소프트랩 회의 역할명. 그 외: API·모델 통칭.
+   * @param {'gpt'|'gem'|'claude'|'user'} role
+   */
+  function participantName(role, mode) {
+    if (mode === 'meeting') {
+      const m = { gpt: '기획팀장', gem: '홍보팀장', claude: '개발팀장', user: '소장' };
+      return m[role] || role;
+    }
+    const d = { gpt: 'ChatGPT', gem: 'Gemini', claude: 'Claude', user: '사용자' };
+    return d[role] || role;
+  }
+
   /* ────────────────────────────────
      메시지 버블
   ──────────────────────────────── */
@@ -760,7 +773,7 @@
     if (isLoading) wrap.id = 'loading-bubble';
 
     const emoji  = speaker === 'gpt' ? '🔵' : speaker === 'claude' ? '🟠' : '🟢';
-    const name   = speaker === 'gpt' ? 'ChatGPT' : speaker === 'claude' ? 'Claude' : 'Gemini';
+    const name   = participantName(speaker, currentSessionMode);
     const body   = isLoading
       ? `<div class="loading-dots"><span></span><span></span><span></span></div>`
       : esc(text);
@@ -782,15 +795,16 @@
     if (el) el.remove();
   }
 
-  /** 사용자(인간) 발언 버블 — AI와 구분 */
+  /** 소장(회의 모드) / 사용자(그 외) 발언 버블 */
   function addUserBubble(text, roundLabel) {
     const container = document.getElementById('messages');
     const wrap = document.createElement('div');
     wrap.className = 'msg-wrap user';
+    const who = participantName('user', currentSessionMode);
     wrap.innerHTML = `
       <div class="avatar user">👤</div>
       <div class="bubble-inner">
-        <div class="bubble-meta">사용자 · ${roundLabel}</div>
+        <div class="bubble-meta">${who} · ${roundLabel}</div>
         <div class="bubble-text">${esc(text)}</div>
       </div>`;
     container.appendChild(wrap);
@@ -852,7 +866,7 @@
         }
         const delay = Math.min(baseDelayMs * Math.pow(2, attempt - 1), 32000);
         const sec = Math.round(delay / 1000);
-        roundEl.textContent = `${roundLabel} · Gemini 재시도 ${attempt}/${maxAttempts - 1} (${sec}초 대기)`;
+        roundEl.textContent = `${roundLabel} · ${participantName('gem', currentSessionMode)} 재시도 ${attempt}/${maxAttempts - 1} (${sec}초 대기)`;
         await sleep(delay);
         roundEl.textContent = prevRoundText;
       }
@@ -974,7 +988,7 @@
         }
         const delay = Math.min(baseDelayMs * Math.pow(2, attempt - 1), 32000);
         const sec = Math.round(delay / 1000);
-        roundEl.textContent = `${roundLabel} · Claude 재시도 ${attempt}/${maxAttempts - 1} (${sec}초 대기)`;
+        roundEl.textContent = `${roundLabel} · ${participantName('claude', currentSessionMode)} 재시도 ${attempt}/${maxAttempts - 1} (${sec}초 대기)`;
         await sleep(delay);
         roundEl.textContent = prevRoundText;
       }
@@ -1019,12 +1033,12 @@
   ──────────────────────────────── */
   function buildGPTSystem(topic, mode) {
     if (mode === 'meeting') {
-      return `당신은 회의에 참여하는 "분석가 A (ChatGPT)"입니다.
+      return `당신은 벧엘소프트랩 회의에 참여하는 "기획팀장"입니다.
 회의 안건: ${topic}
-당신의 역할: 논거를 넓게 탐색하고, 더 나은 결론을 향해 의견을 수렴하는 분석가
+당신의 역할: 논거를 넓게 탐색하고, 더 나은 결론을 향해 의견을 수렴하는 기획 총괄 역할
 규칙:
 - 자신의 논리와 전제는 분명히 하되, 더 타당한 근거가 제시되면 입장을 수정·완화하는 것을 두려워하지 마세요.
-- 이미 제시된 다른 참가자(분석가 B·C 등)의 발언에 사실 오류, 논리적 비약, 근거 부족이 있으면 반드시 "[반박]"으로 시작해 이유와 근거를 명확히 제시하세요.
+- 이미 제시된 다른 참가자(홍보팀장, 개발팀장 등)의 발언에 사실 오류, 논리적 비약, 근거 부족이 있으면 반드시 "[반박]"으로 시작해 이유와 근거를 명확히 제시하세요.
 - 반박 후에는 반드시 올바른 대안이나 수정 의견을 제안하세요.
 - 동의할 수 있는 부분은 인정하고, 발전적으로 보완하세요.
 - 목표는 이기는 것이 아니라 더 나은 결론에 도달하는 것입니다.
@@ -1046,12 +1060,12 @@
 
   function buildGeminiSystem(topic, mode) {
     if (mode === 'meeting') {
-      return `당신은 회의에 참여하는 "분석가 B (Gemini)"입니다.
+      return `당신은 벧엘소프트랩 회의에 참여하는 "홍보팀장"입니다.
 회의 안건: ${topic}
-당신의 역할: 실무적 관점에서 검토하고, 상대 의견을 발전시켜 최선의 결론을 이끄는 분석가
+당신의 역할: 실무·대외·현장 관점에서 검토하고, 상대 의견을 발전시켜 최선의 결론을 이끄는 역할
 규칙:
 - 실무·현장에서 문제가 될 수 있다고 판단되면 소극적으로 넘기지 말고 "[반박]"으로 지적하고, 실행 가능한 대안을 구체적으로 제시하세요.
-- 다른 참가자(분석가 A·C 등)의 발언에 사실 오류, 논리적 비약, 근거 부족이 있으면 반드시 "[반박]"으로 시작해 이유와 근거를 명확히 제시하세요.
+- 다른 참가자(기획팀장, 개발팀장 등)의 발언에 사실 오류, 논리적 비약, 근거 부족이 있으면 반드시 "[반박]"으로 시작해 이유와 근거를 명확히 제시하세요.
 - 반박 후에는 반드시 올바른 대안이나 수정 의견을 제안하세요.
 - 동의할 수 있는 부분은 인정하고, 발전적으로 보완하세요.
 - 목표는 이기는 것이 아니라 더 나은 결론에 도달하는 것입니다.
@@ -1073,12 +1087,12 @@
 
   function buildClaudeSystem(topic, mode) {
     if (mode === 'meeting') {
-      return `당신은 회의에 참여하는 "분석가 C (Claude)"입니다.
+      return `당신은 벧엘소프트랩 회의에 참여하는 "개발팀장"입니다.
 회의 안건: ${topic}
-당신의 역할: ChatGPT(분석가 A)와 Gemini(분석가 B)의 발언을 반영해 종합·조정하고, 합의에 도움이 되는 제안을 하는 분석가
+당신의 역할: 기획팀장과 홍보팀장의 발언을 반영해 종합·조정하고, 합의에 도움이 되는 제안을 하는 역할
 규칙:
 - 실행이 어렵거나 현실성이 부족한 결론이 보이면, 무리한 비난 대신 실행 가능성을 점검하고 더 현실적인 방향을 제안하세요.
-- 먼저 A와 B의 논점을 각각 한 문장 이내로 짚은 뒤, 종합·보완·조정 의견을 제시하세요.
+- 먼저 기획팀장과 홍보팀장의 논점을 각각 한 문장 이내로 짚은 뒤, 종합·보완·조정 의견을 제시하세요.
 - 사실 오류나 논리 비약이 있으면 "[반박]"으로 지적하고 대안을 제안하세요.
 - 동의할 부분은 인정하고, 목표는 더 나은 결론에 도달하는 것입니다.
 - 각 발언은 4~5문장, 간결하고 실무적으로 하세요.
@@ -1127,10 +1141,10 @@
     let conclusionSystemPrompt, conclusionPrompt;
     if (mode === 'meeting') {
       conclusionSystemPrompt = participants3
-        ? '당신은 회의 결과를 경영진에게 보고하는 실무 담당자입니다. ChatGPT·Gemini·Claude 세 참가자의 회의 내용과, 기록에 포함된 사용자(인간)의 반박·추가 의견이 있다면 그것까지 반영해 명확한 결론과 실행 가능한 권고안을 작성하세요. 반드시 한국어로 응답하세요.'
-        : '당신은 회의 결과를 경영진에게 보고하는 실무 담당자입니다. 회의 내용과 사용자(인간)의 반박·추가 의견이 기록에 있으면 반영하여 명확한 결론과 실행 가능한 권고안을 작성하세요. 반드시 한국어로 응답하세요.';
+        ? '당신은 벧엘소프트랩 회의 결과를 정리하는 실무 담당자입니다. 기획팀장·홍보팀장·개발팀장의 회의 내용과, 기록에 포함된 소장의 반박·추가 의견이 있다면 그것까지 반영해 명확한 결론과 실행 가능한 권고안을 작성하세요. 반드시 한국어로 응답하세요.'
+        : '당신은 벧엘소프트랩 회의 결과를 정리하는 실무 담당자입니다. 기획팀장·홍보팀장의 회의 내용과 소장의 반박·추가 의견이 기록에 있으면 반영하여 명확한 결론과 실행 가능한 권고안을 작성하세요. 반드시 한국어로 응답하세요.';
       conclusionPrompt = `회의 안건: ${topic}\n\n회의 내용:\n\n${historyText()}\n\n위 회의를 바탕으로 경영진 보고용 요약을 작성하세요. 다음 항목을 빠짐없이 다루되 중복은 줄이고 실무 톤으로 작성하세요:\n1. 배경 및 핵심 논의 사항\n2. 합의된 점과 남은 쟁점\n3. 실행 방안 (구체적 행동·담당·시기 등, 가능한 범위에서)\n4. 기대 효과\n5. 리스크 및 보완점\n6. 향후 액션 아이템 (실행 가능한 항목)`;
-      document.getElementById('conclusionCard').querySelector('h3').textContent = '📋 회의 결과 보고서';
+      document.getElementById('conclusionCard').querySelector('h3').textContent = '📋 벧엘소프트랩 회의 결과 보고서';
     } else {
       conclusionSystemPrompt = '당신은 AI 토론의 중립적인 정리자입니다. 토론 내용과 사용자(인간)의 반박이 기록에 있으면 반영하여 객관적으로 요약하고 결론을 도출하세요. 한국어로 응답하세요.';
       conclusionPrompt = `지금까지의 토론 내용:\n\n${historyText()}\n\n위 토론을 바탕으로 다음 형식으로 최종 결론을 작성하세요:\n1. 양측의 핵심 주장 요약\n2. 공통점 및 남아 있는 이견\n3. 종합적인 결론 또는 시사점\n(총 6~8문장으로 객관적이고 균형 있게 작성)`;
@@ -1213,7 +1227,7 @@
         let gptUserMsg;
         if (mode === 'meeting') {
           if (r === 1) {
-            gptUserMsg = `회의 안건: "${topic}"\n\n분석가 A로서 이 안건의 핵심 논점과 검토가 필요한 주요 질문을 제시하세요.`;
+            gptUserMsg = `회의 안건: "${topic}"\n\n기획팀장으로서 이 안건의 핵심 논점과 검토가 필요한 주요 질문을 제시하세요.`;
           } else if (r === rounds) {
             gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
           } else {
@@ -1231,7 +1245,7 @@
         const gptText = await callGPT(gptSys, gptUserMsg, gptModel, openaiKey);
         removeLoading();
         addBubble('gpt', gptText, label);
-        debateHistory.push({ name: 'ChatGPT', roundLabel: label, text: gptText });
+        debateHistory.push({ name: participantName('gpt', mode), roundLabel: label, text: gptText });
 
         if (aborted) break;
 
@@ -1240,7 +1254,7 @@
         let gemPrompt;
         if (mode === 'meeting') {
           if (r === 1) {
-            gemPrompt = `${gemSys}\n\n회의 안건: "${topic}"\n\n분석가 A의 첫 발언:\n${gptText}\n\n분석가 B로서 위 의견을 검토하고, 보완하거나 수정이 필요한 부분을 지적한 뒤 우선순위를 제안하세요.`;
+            gemPrompt = `${gemSys}\n\n회의 안건: "${topic}"\n\n기획팀장의 첫 발언:\n${gptText}\n\n홍보팀장으로서 위 의견을 검토하고, 보완하거나 수정이 필요한 부분을 지적한 뒤 우선순위를 제안하세요.`;
           } else if (r === rounds) {
             gemPrompt = `${gemSys}\n\n지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
           } else {
@@ -1258,7 +1272,7 @@
         const gemText = await callGeminiWithRetry(gemPrompt, geminiMdl, geminiKey, label);
         removeLoading();
         addBubble('gem', gemText, label);
-        debateHistory.push({ name: 'Gemini', roundLabel: label, text: gemText });
+        debateHistory.push({ name: participantName('gem', mode), roundLabel: label, text: gemText });
 
         if (aborted) break;
 
@@ -1268,7 +1282,7 @@
           let claudeUserMsg;
           if (mode === 'meeting') {
             if (r === 1) {
-              claudeUserMsg = `회의 안건: "${topic}"\n\n지금까지의 발언:\n\n${historyText()}\n\n분석가 C로서 A(ChatGPT)와 B(Gemini)의 논점을 각각 한 문장으로 짚은 뒤, 종합 의견과 합의에 도움이 되는 제안을 하세요.`;
+              claudeUserMsg = `회의 안건: "${topic}"\n\n지금까지의 발언:\n\n${historyText()}\n\n개발팀장으로서 기획팀장과 홍보팀장의 논점을 각각 한 문장으로 짚은 뒤, 종합 의견과 합의에 도움이 되는 제안을 하세요.`;
             } else if (r === rounds) {
               claudeUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
             } else {
@@ -1298,7 +1312,7 @@
           const claudeText = await callClaudeWithRetry(claudeSys, claudeUserMsg, claudeModel, anthropicKey, label);
           removeLoading();
           addBubble('claude', claudeText, label);
-          debateHistory.push({ name: 'Claude', roundLabel: label, text: claudeText });
+          debateHistory.push({ name: participantName('claude', mode), roundLabel: label, text: claudeText });
         }
       }
 
@@ -1324,7 +1338,7 @@
   }
 
   /**
-   * 결론 도출 후 사용자 반박을 기록에 넣고 추가 라운드(GPT→Gemini→Claude)를 진행합니다.
+   * 결론 도출 후 소장(또는 사용자) 반박을 기록에 넣고 추가 라운드를 진행합니다(회의: 기획→홍보→개발).
    * 이전 발언·결론은 유지되며, 선택 시 결론만 GPT가 다시 정리합니다.
    */
   async function continueAfterUserRebuttal() {
@@ -1355,8 +1369,8 @@
     const mode = currentSessionMode;
     const participants3 = currentSessionParticipants3;
 
-    const userLabel = '사용자 반박';
-    debateHistory.push({ name: '사용자', roundLabel: userLabel, text: userText });
+    const userLabel = mode === 'meeting' ? '소장 반박' : '사용자 반박';
+    debateHistory.push({ name: participantName('user', mode), roundLabel: userLabel, text: userText });
     addUserBubble(userText, userLabel);
 
     const gptSys = buildGPTSystem(topic, mode);
@@ -1382,10 +1396,10 @@
         let gptUserMsg;
         if (mode === 'meeting') {
           if (extraRounds === 1) {
-            gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n직전에 사용자(인간)의 반박·추가 의견이 기록에 포함되어 있습니다. 이를 최우선으로 반영하세요. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요. 상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하세요.`;
+            gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n직전에 ${mode === 'meeting' ? '소장' : '사용자(인간)'}의 반박·추가 의견이 기록에 포함되어 있습니다. 이를 최우선으로 반영하세요. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요. 상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하세요.`;
             gptUserMsg += '\n\n[회의 단계 — 마무리] 이견을 좁히고 실행 가능한 결론 쪽으로 모으세요. 실행·효과·리스크의 체계적 정리는 회의 종료 후 요약 보고서에서 합니다.';
           } else if (r === 1) {
-            gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n직전에 사용자(인간)의 반박·추가 의견이 기록에 포함되어 있습니다. 이를 최우선으로 반영하세요. 상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
+            gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n직전에 ${mode === 'meeting' ? '소장' : '사용자(인간)'}의 반박·추가 의견이 기록에 포함되어 있습니다. 이를 최우선으로 반영하세요. 상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
             gptUserMsg += meetingPhaseHint(r, extraRounds);
           } else if (r === extraRounds) {
             gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
@@ -1401,7 +1415,7 @@
         const gptText = await callGPT(gptSys, gptUserMsg, gptModel, openaiKey);
         removeLoading();
         addBubble('gpt', gptText, label);
-        debateHistory.push({ name: 'ChatGPT', roundLabel: label, text: gptText });
+        debateHistory.push({ name: participantName('gpt', mode), roundLabel: label, text: gptText });
 
         if (aborted) break;
 
@@ -1425,7 +1439,7 @@
         const gemText = await callGeminiWithRetry(gemPrompt, geminiMdl, geminiKey, label);
         removeLoading();
         addBubble('gem', gemText, label);
-        debateHistory.push({ name: 'Gemini', roundLabel: label, text: gemText });
+        debateHistory.push({ name: participantName('gem', mode), roundLabel: label, text: gemText });
 
         if (aborted) break;
 
@@ -1460,7 +1474,7 @@
           const claudeText = await callClaudeWithRetry(claudeSys, claudeUserMsg, claudeModel, anthropicKey, label);
           removeLoading();
           addBubble('claude', claudeText, label);
-          debateHistory.push({ name: 'Claude', roundLabel: label, text: claudeText });
+          debateHistory.push({ name: participantName('claude', mode), roundLabel: label, text: claudeText });
         }
       }
 

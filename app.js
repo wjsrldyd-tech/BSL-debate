@@ -346,9 +346,7 @@ function buildGPTSystem(topic, mode) {
   if (mode === 'meeting') {
     return `당신은 벧엘소프트랩 회의에 참여하는 \"기획팀장\"입니다.\n회의 안건: ${topic}\n당신의 역할: 논거를 넓게 탐색하고, 더 나은 결론을 향해 의견을 수렴하는 기획 총괄 역할\n규칙:\n- 자신의 논리와 전제는 분명히 하되, 더 타당한 근거가 제시되면 입장을 수정·완화하는 것을 두려워하지 마세요.\n- 이미 제시된 다른 참가자(홍보팀장, 개발팀장 등)의 발언에 사실 오류, 논리적 비약, 근거 부족이 있으면 반드시 \"[반박]\"으로 시작해 이유와 근거를 명확히 제시하세요.\n- 반박 후에는 반드시 올바른 대안이나 수정 의견을 제안하세요.\n- 동의할 수 있는 부분은 인정하고, 발전적으로 보완하세요.\n- 목표는 이기는 것이 아니라 더 나은 결론에 도달하는 것입니다.\n- 각 발언은 4~5문장, 간결하고 실무적으로 하세요.\n- 반드시 한국어로 답변하세요.`;
   }
-  const role = mode === 'debate'
-    ? '찬성 측 (주제에 동의하는 입장으로 주장하세요)'
-    : '자유 탐구 (다양한 관점을 열린 자세로 탐색하세요)';
+  const role = '자유 토론 (다양한 관점을 열린 자세로 탐색하세요)';
   return `당신은 AI 토론 대회에 \"ChatGPT\"로 참여하고 있습니다.\n토론 주제: ${topic}\n당신의 역할: ${role}\n규칙:\n- 다른 참가자들의 주장을 읽고 논리적으로 반응하세요.\n- 각 발언은 4~5문장, 간결하고 명확하게 하세요.\n- 근거와 예시를 들어 설득력을 높이세요.\n- 반드시 한국어로 답변하세요.`;
 }
 
@@ -356,18 +354,13 @@ function buildGeminiSystem(topic, mode) {
   if (mode === 'meeting') {
     return `당신은 벧엘소프트랩 회의에 참여하는 \"홍보팀장\"입니다.\n회의 안건: ${topic}\n당신의 역할: 실무·대외·현장 관점에서 검토하고, 상대 의견을 발전시켜 최선의 결론을 이끄는 역할\n규칙:\n- 실무·현장에서 문제가 될 수 있다고 판단되면 소극적으로 넘기지 말고 \"[반박]\"으로 지적하고, 실행 가능한 대안을 구체적으로 제시하세요.\n- 다른 참가자(기획팀장, 개발팀장 등)의 발언에 사실 오류, 논리적 비약, 근거 부족이 있으면 반드시 \"[반박]\"으로 시작해 이유와 근거를 명확히 제시하세요.\n- 반박 후에는 반드시 올바른 대안이나 수정 의견을 제안하세요.\n- 동의할 수 있는 부분은 인정하고, 발전적으로 보완하세요.\n- 목표는 이기는 것이 아니라 더 나은 결론에 도달하는 것입니다.\n- 각 발언은 4~5문장, 간결하고 실무적으로 하세요.\n- 반드시 한국어로 답변하세요.`;
   }
-  const role = mode === 'debate'
-    ? '반대 측 (주제에 반대하는 입장으로 주장하세요)'
-    : '자유 탐구 (다양한 관점을 열린 자세로 탐색하세요)';
+  const role = '자유 토론 (다양한 관점을 열린 자세로 탐색하세요)';
   return `당신은 AI 토론 대회에 \"Gemini\"로 참여하고 있습니다.\n토론 주제: ${topic}\n당신의 역할: ${role}\n규칙:\n- 다른 참가자들의 주장을 읽고 논리적으로 반응하세요.\n- 각 발언은 4~5문장, 간결하고 명확하게 하세요.\n- 근거와 예시를 들어 설득력을 높이세요.\n- 반드시 한국어로 답변하세요.`;
 }
 
 function buildClaudeSystem(topic, mode) {
   if (mode === 'meeting') {
     return `당신은 벧엘소프트랩 회의에 참여하는 \"개발팀장\"입니다.\n회의 안건: ${topic}\n당신의 역할: 기획팀장과 홍보팀장의 발언을 반영해 종합·조정하고, 합의에 도움이 되는 제안을 하는 역할\n규칙:\n- 실행이 어렵거나 현실성이 부족한 결론이 보이면, 무리한 비난 대신 실행 가능성을 점검하고 더 현실적인 방향을 제안하세요.\n- 먼저 기획팀장과 홍보팀장의 논점을 각각 한 문장 이내로 짚은 뒤, 종합·보완·조정 의견을 제시하세요.\n- 사실 오류나 논리 비약이 있으면 \"[반박]\"으로 지적하고 대안을 제안하세요.\n- 동의할 부분은 인정하고, 목표는 더 나은 결론에 도달하는 것입니다.\n- 각 발언은 4~5문장, 간결하고 실무적으로 하세요.\n- 반드시 한국어로 답변하세요.`;
-  }
-  if (mode === 'debate') {
-    return `당신은 AI 토론에 \"Claude\"로 참여합니다. ChatGPT는 찬성 측, Gemini는 반대 측입니다.\n토론 주제: ${topic}\n당신의 역할: 제3자로서 양측 주장을 검토하고, 균형 잡힌 평가·보완·남은 쟁점을 짚으세요. 한쪽에 편들기보다 논리와 근거를 중심으로 말하세요.\n규칙:\n- 찬성·반대 양측의 핵심을 짧게 요약한 뒤 의견을 제시하세요.\n- 각 발언은 4~5문장, 한국어로 답변하세요.`;
   }
   return `당신은 AI 토론 대회에 \"Claude\"로 참여하고 있습니다.\n토론 주제: ${topic}\n당신의 역할: 앞선 발언자(ChatGPT, Gemini)의 의견을 반영해 관점을 보강하고 발전시키세요.\n규칙:\n- 다른 참가자들의 주장을 읽고 논리적으로 반응하세요.\n- 각 발언은 4~5문장, 간결하고 명확하게 하세요.\n- 근거와 예시를 들어 설득력을 높이세요.\n- 반드시 한국어로 답변하세요.`;
 }
@@ -472,7 +465,7 @@ async function startDebate() {
         else gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
       } else {
         gptUserMsg = r === 1
-          ? `주제: \"${topic}\"\n\n${mode === 'debate' ? '찬성 측으로서 첫 번째 주장을 시작하세요.' : '이 주제에 대한 첫 번째 의견을 자유롭게 제시하세요.'}`
+          ? `주제: \"${topic}\"\n\n이 주제에 대한 첫 번째 의견을 자유롭게 제시하세요.`
           : `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
       }
       if (mode === 'meeting') gptUserMsg += meetingPhaseHint(r, rounds);
@@ -492,7 +485,7 @@ async function startDebate() {
         else gemPrompt = `${gemSys}\n\n지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
       } else {
         gemPrompt = r === 1
-          ? `${gemSys}\n\n주제: \"${topic}\"\n\nChatGPT의 첫 번째 주장:\n${gptText}\n\n${mode === 'debate' ? '반대 측으로서 반박하세요.' : 'ChatGPT 의견에 반응하고 당신의 관점을 제시하세요.'}`
+          ? `${gemSys}\n\n주제: \"${topic}\"\n\nChatGPT의 첫 번째 주장:\n${gptText}\n\nChatGPT 의견에 반응하고 당신의 관점을 제시하세요.`
           : `${gemSys}\n\n지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
       }
       if (mode === 'meeting') gemPrompt += meetingPhaseHint(r, rounds);
@@ -511,10 +504,6 @@ async function startDebate() {
           if (r === 1) claudeUserMsg = `회의 안건: \"${topic}\"\n\n지금까지의 발언:\n\n${historyText()}\n\n개발팀장으로서 기획팀장과 홍보팀장의 논점을 각각 한 문장으로 짚은 뒤, 종합 의견과 합의에 도움이 되는 제안을 하세요.`;
           else if (r === rounds) claudeUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
           else claudeUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
-        } else if (mode === 'debate') {
-          if (r === 1) claudeUserMsg = `주제: \"${topic}\"\n\n지금까지의 발언:\n\n${historyText()}\n\n제3자로서 찬성(GPT)과 반대(Gemini) 양측을 검토하고, 균형 잡힌 평가와 보완 의견을 제시하세요.`;
-          else if (r === rounds) claudeUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n마지막 발언입니다. 양측을 정리하고 남은 쟁점과 시사점을 제시하세요.`;
-          else claudeUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
         } else {
           if (r === 1) claudeUserMsg = `주제: \"${topic}\"\n\n지금까지의 발언:\n\n${historyText()}\n\n앞선 두 참가자의 의견을 반영해 당신의 관점을 제시하세요.`;
           else if (r === rounds) claudeUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n마지막 발언입니다. 논의를 정리하고 종합 의견을 제시하세요.`;
@@ -663,10 +652,6 @@ async function continueAfterUserRebuttal() {
             claudeUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
             claudeUserMsg += meetingPhaseHint(r, extraRounds);
           }
-        } else if (mode === 'debate') {
-          claudeUserMsg = r === extraRounds
-            ? `지금까지의 토론:\n\n${historyText()}\n\n마지막 발언입니다. 양측을 정리하고 남은 쟁점과 시사점을 제시하세요.`
-            : `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
         } else {
           claudeUserMsg = r === extraRounds
             ? `지금까지의 토론:\n\n${historyText()}\n\n마지막 발언입니다. 논의를 정리하고 종합 의견을 제시하세요.`

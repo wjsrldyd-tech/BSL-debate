@@ -382,11 +382,8 @@
         <div class="form-group" style="margin-top: 0.8rem;">
           <label>모델</label>
           <select id="gptModel">
-            <option value="gpt-5.4-nano" selected>gpt-5.4-nano (최저가)</option>
-            <option value="gpt-5.4-mini">gpt-5.4-mini (저렴·품질 균형)</option>
-            <option value="gpt-4o-mini">gpt-4o-mini (4o 세대)</option>
-            <option value="gpt-4o">gpt-4o</option>
-            <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+            <option value="gpt-5.3-chat-latest" selected>Instant 5.3 · 모든 채팅 (gpt-5.3-chat-latest)</option>
+            <option value="gpt-5.4">Thinking 5.4 · 복잡한 질문 (gpt-5.4)</option>
           </select>
         </div>
       </div>
@@ -576,7 +573,8 @@
           { role: 'user',   content: userMessage  }
         ],
         max_completion_tokens: 2048,
-        temperature: 0.8
+        /* gpt-5.3-chat-latest, gpt-5.4 등은 temperature 1만 허용 */
+        temperature: 1
       })
     });
 

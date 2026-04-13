@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI 토론 | GPT vs Gemini</title>
+  <title>AI 토론 | GPT · Gemini · Claude</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -106,6 +106,10 @@
       margin-bottom: 1rem;
     }
 
+    .api-row.api-row-3 {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+
     .api-box {
       background: #0f1117;
       border-radius: 10px;
@@ -115,6 +119,7 @@
 
     .api-box.gpt  { border-top: 3px solid #60a5fa; }
     .api-box.gem  { border-top: 3px solid #34d399; }
+    .api-box.claude { border-top: 3px solid #f59e0b; }
 
     .api-box h3 {
       font-size: 0.9rem;
@@ -126,6 +131,7 @@
 
     .api-box.gpt h3 { color: #60a5fa; }
     .api-box.gem h3 { color: #34d399; }
+    .api-box.claude h3 { color: #f59e0b; }
 
     .hint {
       font-size: 0.75rem;
@@ -233,6 +239,7 @@
 
     .msg-wrap.gpt { align-self: flex-start; }
     .msg-wrap.gem { align-self: flex-end; flex-direction: row-reverse; }
+    .msg-wrap.claude { align-self: flex-start; margin-left: 8%; max-width: 78%; }
 
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(8px); }
@@ -253,6 +260,7 @@
 
     .avatar.gpt { background: #1e3a5f; }
     .avatar.gem { background: #064e3b; }
+    .avatar.claude { background: #78350f; }
 
     .bubble-inner { flex: 1; min-width: 0; }
 
@@ -276,6 +284,7 @@
 
     .msg-wrap.gpt .bubble-text { border-left: 3px solid #60a5fa; }
     .msg-wrap.gem .bubble-text { border-right: 3px solid #34d399; }
+    .msg-wrap.claude .bubble-text { border-left: 3px solid #f59e0b; }
 
     .loading-dots {
       display: inline-flex;
@@ -326,8 +335,13 @@
       white-space: pre-wrap;
     }
 
+    @media (max-width: 900px) {
+      .api-row.api-row-3 { grid-template-columns: 1fr; }
+    }
+
     @media (max-width: 600px) {
       .api-row, .grid-2 { grid-template-columns: 1fr; }
+      .msg-wrap.claude { margin-left: 0; max-width: 95%; }
       .msg-wrap { max-width: 95%; }
       .header h1 { font-size: 1.4rem; }
     }
@@ -336,8 +350,8 @@
 <body>
 
 <div class="header">
-  <h1>🤖 AI 토론 — GPT vs Gemini</h1>
-  <p>두 AI가 주제에 대해 번갈아 토론하고 결론을 도출합니다</p>
+  <h1>🤖 AI 토론 — GPT · Gemini · Claude</h1>
+  <p>2명 또는 3명이 라운드마다 순서대로 발언하고 결론을 도출합니다</p>
 </div>
 
 <div class="container">
@@ -366,12 +380,21 @@
         <select id="modeSelect">
           <option value="meeting" selected>회의 모드 (토의 → 결론 수렴)</option>
           <option value="freeform">자유 토론 (다양한 관점 교환)</option>
-          <option value="debate">찬반 토론 (GPT=찬성 / Gemini=반대)</option>
+          <option value="debate">찬반 토론 (GPT=찬성 / Gemini=반대, Claude=검토)</option>
         </select>
       </div>
     </div>
 
-    <div class="api-row">
+    <div class="form-group" style="margin-bottom: 1.1rem;">
+      <label>참가자</label>
+      <select id="participantCount">
+        <option value="2">2명 (ChatGPT → Gemini)</option>
+        <option value="3" selected>3명 (ChatGPT → Gemini → Claude, 순환)</option>
+      </select>
+      <div class="hint">3명일 때 매 라운드마다 A→B→C 순으로 발언하며, 뒷순서는 앞선 발언을 반영합니다.</div>
+    </div>
+
+    <div class="api-row api-row-3" id="apiKeysRow">
       <div class="api-box gpt">
         <h3>🔵 ChatGPT (OpenAI)</h3>
         <div class="form-group">
@@ -401,6 +424,23 @@
             <option value="gemini-3-flash-preview__minimal">빠른 모델 · 빠르게 답변 (3 Flash)</option>
             <option value="gemini-3-flash-preview__high" selected>사고 모델 · 복잡한 문제 해결 (3 Flash)</option>
             <option value="gemini-3.1-pro-preview">Pro · 고급 수학·코딩 (3.1 Pro)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="api-box claude" id="claudeApiBox">
+        <h3>🟠 Claude (Anthropic)</h3>
+        <div class="form-group">
+          <label>API Key</label>
+          <input type="password" id="anthropicKey" placeholder="sk-ant-...">
+          <div class="hint">발급: <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a> · 브라우저에서 호출 시 CORS 정책에 따라 차단될 수 있어, 안 되면 로컬 서버로 여세요.</div>
+        </div>
+        <div class="form-group" style="margin-top: 0.8rem;">
+          <label>모델</label>
+          <select id="claudeModel">
+            <option value="claude-sonnet-4-6" selected>Claude Sonnet 4.6 (균형)</option>
+            <option value="claude-haiku-4-5">Claude Haiku 4.5 (빠름)</option>
+            <option value="claude-opus-4-6">Claude Opus 4.6 (최고 성능)</option>
           </select>
         </div>
       </div>
@@ -450,13 +490,24 @@
 <script>
   const LS_OPENAI_KEY = 'bsl-debate-openai-key';
   const LS_GEMINI_KEY = 'bsl-debate-gemini-key';
+  const LS_ANTHROPIC_KEY = 'bsl-debate-anthropic-key';
+
+  function syncParticipantUi() {
+    const three = document.getElementById('participantCount').value === '3';
+    const row = document.getElementById('apiKeysRow');
+    const claudeBox = document.getElementById('claudeApiBox');
+    row.classList.toggle('api-row-3', three);
+    claudeBox.style.display = three ? '' : 'none';
+  }
 
   function loadApiKeysFromStorage() {
     try {
       const o = localStorage.getItem(LS_OPENAI_KEY);
       const g = localStorage.getItem(LS_GEMINI_KEY);
+      const a = localStorage.getItem(LS_ANTHROPIC_KEY);
       if (o != null && o !== '') document.getElementById('openaiKey').value = o;
       if (g != null && g !== '') document.getElementById('geminiKey').value = g;
+      if (a != null && a !== '') document.getElementById('anthropicKey').value = a;
     } catch (_) { /* 비공개 창 등 */ }
   }
 
@@ -464,10 +515,13 @@
     try {
       const o = document.getElementById('openaiKey').value.trim();
       const g = document.getElementById('geminiKey').value.trim();
+      const a = document.getElementById('anthropicKey').value.trim();
       if (o) localStorage.setItem(LS_OPENAI_KEY, o);
       else localStorage.removeItem(LS_OPENAI_KEY);
       if (g) localStorage.setItem(LS_GEMINI_KEY, g);
       else localStorage.removeItem(LS_GEMINI_KEY);
+      if (a) localStorage.setItem(LS_ANTHROPIC_KEY, a);
+      else localStorage.removeItem(LS_ANTHROPIC_KEY);
     } catch (_) { /* 비공개 창 등 */ }
   }
 
@@ -475,14 +529,19 @@
     try {
       localStorage.removeItem(LS_OPENAI_KEY);
       localStorage.removeItem(LS_GEMINI_KEY);
+      localStorage.removeItem(LS_ANTHROPIC_KEY);
     } catch (_) { /* ignore */ }
     document.getElementById('openaiKey').value = '';
     document.getElementById('geminiKey').value = '';
+    document.getElementById('anthropicKey').value = '';
   }
 
   loadApiKeysFromStorage();
+  syncParticipantUi();
   document.getElementById('openaiKey').addEventListener('change', saveApiKeysToStorage);
   document.getElementById('geminiKey').addEventListener('change', saveApiKeysToStorage);
+  document.getElementById('anthropicKey').addEventListener('change', saveApiKeysToStorage);
+  document.getElementById('participantCount').addEventListener('change', syncParticipantUi);
   document.getElementById('clearStoredKeys').addEventListener('click', clearStoredApiKeys);
 
   /* ────────────────────────────────
@@ -520,8 +579,8 @@
     wrap.className = `msg-wrap ${speaker}`;
     if (isLoading) wrap.id = 'loading-bubble';
 
-    const emoji  = speaker === 'gpt' ? '🔵' : '🟢';
-    const name   = speaker === 'gpt' ? 'ChatGPT' : 'Gemini';
+    const emoji  = speaker === 'gpt' ? '🔵' : speaker === 'claude' ? '🟠' : '🟢';
+    const name   = speaker === 'gpt' ? 'ChatGPT' : speaker === 'claude' ? 'Claude' : 'Gemini';
     const body   = isLoading
       ? `<div class="loading-dots"><span></span><span></span><span></span></div>`
       : esc(text);
@@ -557,6 +616,53 @@
       return '현재 할당량(쿼터)을 초과했습니다. 요금제·결제·사용 한도를 확인한 뒤, 안내에 나온 대기 시간 후 다시 시도해 주세요.';
     }
     return m;
+  }
+
+  /** 일시적 과부하·서버 오류 등 재시도할 만한 Gemini 오류인지 (쿼터 초과·키 오류 등은 제외) */
+  function isGeminiRetryableError(errorMessage) {
+    const m = String(errorMessage);
+    if (/할당량\(쿼터\)을 초과|exceeded your current quota/i.test(m)) return false;
+    if (/API key|인증|permission|PERMISSION|invalid.*key|API_KEY_INVALID|not found.*model|지원하지 않|Unsupported/i.test(m)) return false;
+    if (/429|503|500|502|504|UNAVAILABLE|overloaded|high demand|Spikes in demand|일시적|지연|try again|Resource exhausted|Deadline|timeout/i.test(m)) return true;
+    if (/Gemini 오류:/.test(m) && !/쿼터|quota|invalid|Invalid|not supported/i.test(m)) return true;
+    return false;
+  }
+
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Gemini만 여러 번 재시도합니다. ChatGPT는 추가 호출하지 않습니다.
+   * @param {string} roundLabel - UI에 표시할 라운드 문구 (예: "2 / 5 라운드")
+   */
+  async function callGeminiWithRetry(prompt, modelSelectValue, key, roundLabel) {
+    const maxAttempts = 5;
+    const baseDelayMs = 2500;
+    let lastErr = null;
+    const roundEl = document.getElementById('roundDisplay');
+    const prevRoundText = roundEl.textContent;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await callGemini(prompt, modelSelectValue, key);
+      } catch (e) {
+        lastErr = e;
+        const retry = isGeminiRetryableError(e.message || '');
+        if (!retry || attempt === maxAttempts) {
+          roundEl.textContent = prevRoundText;
+          const extra = ' (앞선 참가자 발언은 이미 이 라운드에서 완료되었습니다. 잠시 후 다시 시도하거나 모델을 바꿔 보세요.)';
+          throw new Error((e.message || String(e)) + extra);
+        }
+        const delay = Math.min(baseDelayMs * Math.pow(2, attempt - 1), 32000);
+        const sec = Math.round(delay / 1000);
+        roundEl.textContent = `${roundLabel} · Gemini 재시도 ${attempt}/${maxAttempts - 1} (${sec}초 대기)`;
+        await sleep(delay);
+        roundEl.textContent = prevRoundText;
+      }
+    }
+    roundEl.textContent = prevRoundText;
+    throw lastErr;
   }
 
   async function callGPT(systemPrompt, userMessage, model, key) {
@@ -624,7 +730,92 @@
       throw new Error(`Gemini 오류: ${localizeGeminiErrorMessage(raw)}`);
     }
     const data = await res.json();
-    return data.candidates[0].content.parts[0].text.trim();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (text == null || String(text).trim() === '') {
+      throw new Error('Gemini 오류: 빈 응답입니다. 일시적 오류일 수 있으니 잠시 후 다시 시도해 주세요.');
+    }
+    return String(text).trim();
+  }
+
+  /** Anthropic API 오류 문구를 한글 안내로 바꿉니다. */
+  function localizeClaudeErrorMessage(raw) {
+    if (raw == null || raw === '') return String(raw);
+    const m = String(raw);
+    if (/credit balance is too low|too low to access the Anthropic API/i.test(m)) {
+      return 'Anthropic API 크레딧이 부족합니다. console.anthropic.com → Plans & Billing에서 API 크레딧을 확인하세요. 결제 직후 반영 지연, 채팅(Claude.ai) 요금과 API 크레딧이 별도인 경우, 다른 조직에서 발급한 키 사용 등을 점검해 보세요.';
+    }
+    if (/payment|billing|402|insufficient/i.test(m)) {
+      return `${m} (Anthropic 콘솔에서 결제·크레딧을 확인하세요.)`;
+    }
+    return m;
+  }
+
+  function isClaudeRetryableError(errorMessage) {
+    const m = String(errorMessage);
+    if (/크레딧이 부족|크레딧을 확인|Plans & Billing|결제|payment required|402|credit balance|too low to access|invalid.*key|401|403|인증/i.test(m)) return false;
+    if (/rate_limit|429|529|503|502|500|overloaded|Overloaded|timeout|Try again|빈 응답|일시/i.test(m)) return true;
+    return false;
+  }
+
+  async function callClaudeWithRetry(systemPrompt, userMessage, model, key, roundLabel) {
+    const maxAttempts = 5;
+    const baseDelayMs = 2500;
+    const roundEl = document.getElementById('roundDisplay');
+    const prevRoundText = roundEl.textContent;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await callClaude(systemPrompt, userMessage, model, key);
+      } catch (e) {
+        const retry = isClaudeRetryableError(e.message || '');
+        if (!retry || attempt === maxAttempts) {
+          roundEl.textContent = prevRoundText;
+          const billing = /크레딧이 부족|Plans & Billing|402|payment required|too low/i.test(e.message || '');
+          const extra = billing
+            ? ' (앞선 참가자 발언은 이미 완료되었습니다. 크레딧·결제 문제는 재시도로 해결되지 않을 수 있습니다.)'
+            : ' (앞선 참가자 발언은 이미 이 라운드에서 완료되었습니다. 잠시 후 다시 시도해 주세요.)';
+          throw new Error((e.message || String(e)) + extra);
+        }
+        const delay = Math.min(baseDelayMs * Math.pow(2, attempt - 1), 32000);
+        const sec = Math.round(delay / 1000);
+        roundEl.textContent = `${roundLabel} · Claude 재시도 ${attempt}/${maxAttempts - 1} (${sec}초 대기)`;
+        await sleep(delay);
+        roundEl.textContent = prevRoundText;
+      }
+    }
+    roundEl.textContent = prevRoundText;
+    throw new Error('Claude 오류: 재시도 한도를 초과했습니다.');
+  }
+
+  async function callClaude(systemPrompt, userMessage, model, key) {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }]
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const msg = err.error?.message || err.detail || res.status;
+      throw new Error(`Claude 오류: ${localizeClaudeErrorMessage(msg)}`);
+    }
+    const data = await res.json();
+    const block = Array.isArray(data.content) ? data.content.find(c => c.type === 'text') : null;
+    const text = block?.text;
+    if (text == null || String(text).trim() === '') {
+      throw new Error('Claude 오류: 빈 응답입니다. 잠시 후 다시 시도해 주세요.');
+    }
+    return String(text).trim();
   }
 
   /* ────────────────────────────────
@@ -636,7 +827,7 @@
 회의 안건: ${topic}
 당신의 역할: 논거를 넓게 탐색하고, 더 나은 결론을 향해 의견을 수렴하는 분석가
 규칙:
-- 상대방(분석가 B)의 발언에 사실 오류, 논리적 비약, 근거 부족이 있으면 반드시 "[반박]"으로 시작해 이유와 근거를 명확히 제시하세요.
+- 이미 제시된 다른 참가자(분석가 B·C 등)의 발언에 사실 오류, 논리적 비약, 근거 부족이 있으면 반드시 "[반박]"으로 시작해 이유와 근거를 명확히 제시하세요.
 - 반박 후에는 반드시 올바른 대안이나 수정 의견을 제안하세요.
 - 동의할 수 있는 부분은 인정하고, 발전적으로 보완하세요.
 - 목표는 이기는 것이 아니라 더 나은 결론에 도달하는 것입니다.
@@ -650,7 +841,7 @@
 토론 주제: ${topic}
 당신의 역할: ${role}
 규칙:
-- 상대방(Gemini)의 주장을 읽고 논리적으로 반응하세요.
+- 다른 참가자들의 주장을 읽고 논리적으로 반응하세요.
 - 각 발언은 4~5문장, 간결하고 명확하게 하세요.
 - 근거와 예시를 들어 설득력을 높이세요.
 - 반드시 한국어로 답변하세요.`;
@@ -662,7 +853,7 @@
 회의 안건: ${topic}
 당신의 역할: 실무적 관점에서 검토하고, 상대 의견을 발전시켜 최선의 결론을 이끄는 분석가
 규칙:
-- 상대방(분석가 A)의 발언에 사실 오류, 논리적 비약, 근거 부족이 있으면 반드시 "[반박]"으로 시작해 이유와 근거를 명확히 제시하세요.
+- 다른 참가자(분석가 A·C 등)의 발언에 사실 오류, 논리적 비약, 근거 부족이 있으면 반드시 "[반박]"으로 시작해 이유와 근거를 명확히 제시하세요.
 - 반박 후에는 반드시 올바른 대안이나 수정 의견을 제안하세요.
 - 동의할 수 있는 부분은 인정하고, 발전적으로 보완하세요.
 - 목표는 이기는 것이 아니라 더 나은 결론에 도달하는 것입니다.
@@ -676,7 +867,37 @@
 토론 주제: ${topic}
 당신의 역할: ${role}
 규칙:
-- 상대방(ChatGPT)의 주장을 읽고 논리적으로 반응하세요.
+- 다른 참가자들의 주장을 읽고 논리적으로 반응하세요.
+- 각 발언은 4~5문장, 간결하고 명확하게 하세요.
+- 근거와 예시를 들어 설득력을 높이세요.
+- 반드시 한국어로 답변하세요.`;
+  }
+
+  function buildClaudeSystem(topic, mode) {
+    if (mode === 'meeting') {
+      return `당신은 회의에 참여하는 "분석가 C (Claude)"입니다.
+회의 안건: ${topic}
+당신의 역할: ChatGPT(분석가 A)와 Gemini(분석가 B)의 발언을 반영해 종합·조정하고, 합의에 도움이 되는 제안을 하는 분석가
+규칙:
+- 먼저 A와 B의 논점을 각각 한 문장 이내로 짚은 뒤, 종합·보완·조정 의견을 제시하세요.
+- 사실 오류나 논리 비약이 있으면 "[반박]"으로 지적하고 대안을 제안하세요.
+- 동의할 부분은 인정하고, 목표는 더 나은 결론에 도달하는 것입니다.
+- 각 발언은 4~5문장, 간결하고 실무적으로 하세요.
+- 반드시 한국어로 답변하세요.`;
+    }
+    if (mode === 'debate') {
+      return `당신은 AI 토론에 "Claude"로 참여합니다. ChatGPT는 찬성 측, Gemini는 반대 측입니다.
+토론 주제: ${topic}
+당신의 역할: 제3자로서 양측 주장을 검토하고, 균형 잡힌 평가·보완·남은 쟁점을 짚으세요. 한쪽에 편들기보다 논리와 근거를 중심으로 말하세요.
+규칙:
+- 찬성·반대 양측의 핵심을 짧게 요약한 뒤 의견을 제시하세요.
+- 각 발언은 4~5문장, 한국어로 답변하세요.`;
+    }
+    return `당신은 AI 토론 대회에 "Claude"로 참여하고 있습니다.
+토론 주제: ${topic}
+당신의 역할: 앞선 발언자(ChatGPT, Gemini)의 의견을 반영해 관점을 보강하고 발전시키세요.
+규칙:
+- 다른 참가자들의 주장을 읽고 논리적으로 반응하세요.
 - 각 발언은 4~5문장, 간결하고 명확하게 하세요.
 - 근거와 예시를 들어 설득력을 높이세요.
 - 반드시 한국어로 답변하세요.`;
@@ -694,19 +915,23 @@
   async function startDebate() {
     hideError();
 
-    const topic      = document.getElementById('topicInput').value.trim();
-    const openaiKey  = document.getElementById('openaiKey').value.trim();
-    const geminiKey  = document.getElementById('geminiKey').value.trim();
-    const rounds     = parseInt(document.getElementById('roundsSelect').value);
-    const mode       = document.getElementById('modeSelect').value;
-    const gptModel   = document.getElementById('gptModel').value;
-    const geminiMdl  = document.getElementById('geminiModel').value;
+    const topic          = document.getElementById('topicInput').value.trim();
+    const openaiKey      = document.getElementById('openaiKey').value.trim();
+    const geminiKey      = document.getElementById('geminiKey').value.trim();
+    const anthropicKey   = document.getElementById('anthropicKey').value.trim();
+    const rounds         = parseInt(document.getElementById('roundsSelect').value);
+    const mode           = document.getElementById('modeSelect').value;
+    const gptModel       = document.getElementById('gptModel').value;
+    const geminiMdl      = document.getElementById('geminiModel').value;
+    const claudeModel    = document.getElementById('claudeModel').value;
+    const participants3  = document.getElementById('participantCount').value === '3';
 
     saveApiKeysToStorage();
 
     if (!topic)     return showError('토론 주제를 입력해주세요.');
     if (!openaiKey) return showError('OpenAI API 키를 입력해주세요.');
     if (!geminiKey) return showError('Google AI API 키를 입력해주세요.');
+    if (participants3 && !anthropicKey) return showError('3인 토론은 Anthropic(Claude) API 키를 입력해주세요.');
 
     aborted = false;
     debateHistory = [];
@@ -726,6 +951,7 @@
 
     const gptSys = buildGPTSystem(topic, mode);
     const gemSys = buildGeminiSystem(topic, mode);
+    const claudeSys = participants3 ? buildClaudeSystem(topic, mode) : '';
 
     try {
       for (let r = 1; r <= rounds; r++) {
@@ -774,10 +1000,48 @@
             : `${gemSys}\n\n지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
         }
 
-        const gemText = await callGemini(gemPrompt, geminiMdl, geminiKey);
+        const gemText = await callGeminiWithRetry(gemPrompt, geminiMdl, geminiKey, label);
         removeLoading();
         addBubble('gem', gemText, label);
         debateHistory.push({ name: 'Gemini', roundLabel: label, text: gemText });
+
+        if (aborted) break;
+
+        /* ── Claude 발언 (3인일 때만, 매 라운드 마지막 순서) ── */
+        if (participants3) {
+          addBubble('claude', '', label, true);
+          let claudeUserMsg;
+          if (mode === 'meeting') {
+            if (r === 1) {
+              claudeUserMsg = `회의 안건: "${topic}"\n\n지금까지의 발언:\n\n${historyText()}\n\n분석가 C로서 A(ChatGPT)와 B(Gemini)의 논점을 각각 한 문장으로 짚은 뒤, 종합 의견과 합의에 도움이 되는 제안을 하세요.`;
+            } else if (r === rounds) {
+              claudeUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
+            } else {
+              claudeUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
+            }
+          } else if (mode === 'debate') {
+            if (r === 1) {
+              claudeUserMsg = `주제: "${topic}"\n\n지금까지의 발언:\n\n${historyText()}\n\n제3자로서 찬성(GPT)과 반대(Gemini) 양측을 검토하고, 균형 잡힌 평가와 보완 의견을 제시하세요.`;
+            } else if (r === rounds) {
+              claudeUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n마지막 발언입니다. 양측을 정리하고 남은 쟁점과 시사점을 제시하세요.`;
+            } else {
+              claudeUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
+            }
+          } else {
+            if (r === 1) {
+              claudeUserMsg = `주제: "${topic}"\n\n지금까지의 발언:\n\n${historyText()}\n\n앞선 두 참가자의 의견을 반영해 당신의 관점을 제시하세요.`;
+            } else if (r === rounds) {
+              claudeUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n마지막 발언입니다. 논의를 정리하고 종합 의견을 제시하세요.`;
+            } else {
+              claudeUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
+            }
+          }
+
+          const claudeText = await callClaudeWithRetry(claudeSys, claudeUserMsg, claudeModel, anthropicKey, label);
+          removeLoading();
+          addBubble('claude', claudeText, label);
+          debateHistory.push({ name: 'Claude', roundLabel: label, text: claudeText });
+        }
       }
 
       if (!aborted) {
@@ -787,7 +1051,9 @@
 
         let conclusionSystemPrompt, conclusionPrompt;
         if (mode === 'meeting') {
-          conclusionSystemPrompt = '당신은 회의 결과를 경영진에게 보고하는 실무 담당자입니다. 회의 내용을 토대로 명확한 결론과 실행 가능한 권고안을 작성하세요. 반드시 한국어로 응답하세요.';
+          conclusionSystemPrompt = participants3
+            ? '당신은 회의 결과를 경영진에게 보고하는 실무 담당자입니다. ChatGPT·Gemini·Claude 세 참가자의 회의 내용을 토대로 명확한 결론과 실행 가능한 권고안을 작성하세요. 반드시 한국어로 응답하세요.'
+            : '당신은 회의 결과를 경영진에게 보고하는 실무 담당자입니다. 회의 내용을 토대로 명확한 결론과 실행 가능한 권고안을 작성하세요. 반드시 한국어로 응답하세요.';
           conclusionPrompt = `회의 안건: ${topic}\n\n회의 내용:\n\n${historyText()}\n\n위 회의 결과를 바탕으로 다음 형식의 보고서를 작성하세요:\n1. 배경 및 핵심 논의 사항\n2. 주요 검토 내용 (합의점 및 남은 쟁점)\n3. 최종 결론 및 권고안\n4. 향후 액션 아이템\n(간결하고 실무적인 보고서 어투로 작성)`;
           document.getElementById('conclusionCard').querySelector('h3').textContent = '📋 회의 결과 보고서';
         } else {

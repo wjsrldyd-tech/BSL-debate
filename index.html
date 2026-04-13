@@ -32,10 +32,64 @@
 
     .header p { color: #94a3b8; font-size: 0.9rem; }
 
-    .container {
-      max-width: 900px;
+    /* PC 2열: 좌 설정 / 우 토론 */
+    .app-layout {
+      display: grid;
+      grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+      gap: 1.5rem;
+      width: 100%;
+      max-width: none;
       margin: 0 auto;
-      padding: 2rem 1rem;
+      padding: 1.25rem 1.5rem 2rem;
+      min-height: calc(100vh - 5.5rem);
+      align-items: stretch;
+    }
+
+    .setup-column {
+      min-width: 0;
+    }
+
+    .setup-column .card {
+      margin-bottom: 0;
+      position: sticky;
+      top: 1rem;
+      max-height: calc(100vh - 2rem);
+      overflow-y: auto;
+    }
+
+    .setup-column .api-row,
+    .setup-column .api-row.api-row-3 {
+      grid-template-columns: 1fr;
+    }
+
+    .debate-column {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      background: #181c28;
+      border: 1px solid #2d3748;
+      border-radius: 14px;
+      padding: 1.25rem 1.35rem;
+      min-height: min(420px, calc(100vh - 6rem));
+    }
+
+    .debate-placeholder {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #64748b;
+      font-size: 0.92rem;
+      text-align: center;
+      line-height: 1.6;
+      padding: 2rem 1.5rem;
+      border: 1px dashed #334155;
+      border-radius: 12px;
+      min-height: 12rem;
+    }
+
+    .debate-column.debate-active .debate-placeholder {
+      display: none;
     }
 
     .card {
@@ -181,6 +235,7 @@
     .restart-btn {
       background: linear-gradient(135deg, #475569, #334155);
       margin-top: 0.75rem;
+      flex-shrink: 0;
     }
 
     .error-msg {
@@ -195,8 +250,15 @@
     }
 
     /* Debate Area */
-    .debate-area { display: none; }
-    .debate-area.visible { display: block; }
+    .debate-area {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .debate-area.visible {
+      display: flex;
+    }
 
     .debate-topbar {
       display: flex;
@@ -204,6 +266,7 @@
       align-items: flex-start;
       margin-bottom: 1.25rem;
       gap: 1rem;
+      flex-shrink: 0;
     }
 
     .topic-label { font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem; }
@@ -228,6 +291,10 @@
       display: flex;
       flex-direction: column;
       gap: 1.1rem;
+      flex: 1;
+      overflow-y: auto;
+      min-height: 12rem;
+      padding-right: 0.35rem;
     }
 
     .msg-wrap {
@@ -314,7 +381,8 @@
       border: 1px solid #3b82f6;
       border-radius: 14px;
       padding: 1.5rem;
-      margin-top: 1.5rem;
+      margin-top: 1rem;
+      flex-shrink: 0;
       display: none;
       animation: fadeUp 0.4s ease;
     }
@@ -336,6 +404,19 @@
     }
 
     @media (max-width: 900px) {
+      .app-layout {
+        grid-template-columns: 1fr;
+        min-height: auto;
+        padding: 1rem;
+      }
+      .setup-column .card {
+        position: static;
+        max-height: none;
+        overflow-y: visible;
+      }
+      .debate-column {
+        min-height: 280px;
+      }
       .api-row.api-row-3 { grid-template-columns: 1fr; }
     }
 
@@ -354,9 +435,10 @@
   <p>2명 또는 3명이 라운드마다 순서대로 발언하고 결론을 도출합니다</p>
 </div>
 
-<div class="container">
+<div class="app-layout">
 
-  <!-- ── 설정 카드 ── -->
+  <!-- ── 좌측: 설정 ── -->
+  <aside class="setup-column">
   <div class="card" id="setupCard">
     <div class="card-title">⚙️ 토론 설정</div>
 
@@ -458,8 +540,13 @@
       🚀 토론 시작
     </button>
   </div>
+  </aside>
 
-  <!-- ── 토론 영역 ── -->
+  <!-- ── 우측: 토론 ── -->
+  <main class="debate-column" id="debateColumn">
+    <div class="debate-placeholder" id="debatePlaceholder">
+      토론을 시작하면 이 영역에 라운드별 발언이 표시됩니다.
+    </div>
   <div class="debate-area" id="debateArea">
 
     <div class="debate-topbar">
@@ -486,6 +573,7 @@
     </button>
 
   </div>
+  </main>
 </div>
 
 <script>
@@ -955,6 +1043,7 @@
     btn.disabled = true;
     btn.textContent = '⏳ 토론 진행 중...';
 
+    document.getElementById('debateColumn').classList.add('debate-active');
     document.getElementById('debateArea').classList.add('visible');
     document.getElementById('topicDisplay').textContent = topic;
     document.querySelector('.topic-label').textContent = mode === 'meeting' ? '회의 안건' : '토론 주제';
@@ -1118,6 +1207,7 @@
   function restart() {
     aborted = true;
     debateHistory = [];
+    document.getElementById('debateColumn').classList.remove('debate-active');
     document.getElementById('debateArea').classList.remove('visible');
     document.getElementById('messages').innerHTML = '';
     window.scrollTo({ top: 0, behavior: 'smooth' });

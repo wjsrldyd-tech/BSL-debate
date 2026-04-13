@@ -136,6 +136,26 @@
     .hint a { color: #60a5fa; text-decoration: none; }
     .hint a:hover { text-decoration: underline; }
 
+    .api-key-bar {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 0.6rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 0.75rem;
+    }
+    .api-key-bar button {
+      background: none;
+      border: none;
+      color: #60a5fa;
+      cursor: pointer;
+      font-size: inherit;
+      text-decoration: underline;
+      padding: 0;
+    }
+    .api-key-bar button:hover { color: #93c5fd; }
+
     .start-btn {
       width: 100%;
       padding: 0.85rem;
@@ -344,6 +364,7 @@
       <div class="form-group">
         <label>토론 방식</label>
         <select id="modeSelect">
+          <option value="meeting" selected>회의 모드 (토의 → 결론 수렴)</option>
           <option value="freeform">자유 토론 (다양한 관점 교환)</option>
           <option value="debate">찬반 토론 (GPT=찬성 / Gemini=반대)</option>
         </select>
@@ -388,6 +409,11 @@
       </div>
     </div>
 
+    <div class="api-key-bar">
+      <span>API 키는 이 브라우저에만 저장됩니다(localStorage).</span>
+      <button type="button" id="clearStoredKeys">저장된 키 삭제</button>
+    </div>
+
     <div class="error-msg" id="errorMsg"></div>
 
     <button class="start-btn" id="startBtn" onclick="startDebate()">
@@ -425,22 +451,42 @@
 </div>
 
 <script>
-  /* 로컬에서만 사용: 아래에 키를 넣으면 입력란에 자동 반영됩니다.
-     GitHub 등에 올리지 마세요. 노출 시 즉시 키를 폐기하고 새로 발급하세요. */
-  const HARDCODED_API_KEYS = {
-    openai: '',
-    gemini: ''
-  };
+  const LS_OPENAI_KEY = 'bsl-debate-openai-key';
+  const LS_GEMINI_KEY = 'bsl-debate-gemini-key';
 
-  function applyHardcodedKeys() {
-    if (HARDCODED_API_KEYS.openai) {
-      document.getElementById('openaiKey').value = HARDCODED_API_KEYS.openai;
-    }
-    if (HARDCODED_API_KEYS.gemini) {
-      document.getElementById('geminiKey').value = HARDCODED_API_KEYS.gemini;
-    }
+  function loadApiKeysFromStorage() {
+    try {
+      const o = localStorage.getItem(LS_OPENAI_KEY);
+      const g = localStorage.getItem(LS_GEMINI_KEY);
+      if (o != null && o !== '') document.getElementById('openaiKey').value = o;
+      if (g != null && g !== '') document.getElementById('geminiKey').value = g;
+    } catch (_) { /* 비공개 창 등 */ }
   }
-  applyHardcodedKeys();
+
+  function saveApiKeysToStorage() {
+    try {
+      const o = document.getElementById('openaiKey').value.trim();
+      const g = document.getElementById('geminiKey').value.trim();
+      if (o) localStorage.setItem(LS_OPENAI_KEY, o);
+      else localStorage.removeItem(LS_OPENAI_KEY);
+      if (g) localStorage.setItem(LS_GEMINI_KEY, g);
+      else localStorage.removeItem(LS_GEMINI_KEY);
+    } catch (_) { /* 비공개 창 등 */ }
+  }
+
+  function clearStoredApiKeys() {
+    try {
+      localStorage.removeItem(LS_OPENAI_KEY);
+      localStorage.removeItem(LS_GEMINI_KEY);
+    } catch (_) { /* ignore */ }
+    document.getElementById('openaiKey').value = '';
+    document.getElementById('geminiKey').value = '';
+  }
+
+  loadApiKeysFromStorage();
+  document.getElementById('openaiKey').addEventListener('change', saveApiKeysToStorage);
+  document.getElementById('geminiKey').addEventListener('change', saveApiKeysToStorage);
+  document.getElementById('clearStoredKeys').addEventListener('click', clearStoredApiKeys);
 
   /* ────────────────────────────────
      상태
@@ -567,6 +613,18 @@
      시스템 프롬프트
   ──────────────────────────────── */
   function buildGPTSystem(topic, mode) {
+    if (mode === 'meeting') {
+      return `당신은 회의에 참여하는 "분석가 A (ChatGPT)"입니다.
+회의 안건: ${topic}
+당신의 역할: 논거를 넓게 탐색하고, 더 나은 결론을 향해 의견을 수렴하는 분석가
+규칙:
+- 상대방(분석가 B)의 발언에 사실 오류, 논리적 비약, 근거 부족이 있으면 반드시 "[반박]"으로 시작해 이유와 근거를 명확히 제시하세요.
+- 반박 후에는 반드시 올바른 대안이나 수정 의견을 제안하세요.
+- 동의할 수 있는 부분은 인정하고, 발전적으로 보완하세요.
+- 목표는 이기는 것이 아니라 더 나은 결론에 도달하는 것입니다.
+- 각 발언은 4~5문장, 간결하고 실무적으로 하세요.
+- 반드시 한국어로 답변하세요.`;
+    }
     const role = mode === 'debate'
       ? '찬성 측 (주제에 동의하는 입장으로 주장하세요)'
       : '자유 탐구 (다양한 관점을 열린 자세로 탐색하세요)';
@@ -581,6 +639,18 @@
   }
 
   function buildGeminiSystem(topic, mode) {
+    if (mode === 'meeting') {
+      return `당신은 회의에 참여하는 "분석가 B (Gemini)"입니다.
+회의 안건: ${topic}
+당신의 역할: 실무적 관점에서 검토하고, 상대 의견을 발전시켜 최선의 결론을 이끄는 분석가
+규칙:
+- 상대방(분석가 A)의 발언에 사실 오류, 논리적 비약, 근거 부족이 있으면 반드시 "[반박]"으로 시작해 이유와 근거를 명확히 제시하세요.
+- 반박 후에는 반드시 올바른 대안이나 수정 의견을 제안하세요.
+- 동의할 수 있는 부분은 인정하고, 발전적으로 보완하세요.
+- 목표는 이기는 것이 아니라 더 나은 결론에 도달하는 것입니다.
+- 각 발언은 4~5문장, 간결하고 실무적으로 하세요.
+- 반드시 한국어로 답변하세요.`;
+    }
     const role = mode === 'debate'
       ? '반대 측 (주제에 반대하는 입장으로 주장하세요)'
       : '자유 탐구 (다양한 관점을 열린 자세로 탐색하세요)';
@@ -614,6 +684,8 @@
     const gptModel   = document.getElementById('gptModel').value;
     const geminiMdl  = document.getElementById('geminiModel').value;
 
+    saveApiKeysToStorage();
+
     if (!topic)     return showError('토론 주제를 입력해주세요.');
     if (!openaiKey) return showError('OpenAI API 키를 입력해주세요.');
     if (!geminiKey) return showError('Google AI API 키를 입력해주세요.');
@@ -627,6 +699,7 @@
 
     document.getElementById('debateArea').classList.add('visible');
     document.getElementById('topicDisplay').textContent = topic;
+    document.querySelector('.topic-label').textContent = mode === 'meeting' ? '회의 안건' : '토론 주제';
     document.getElementById('messages').innerHTML = '';
     document.getElementById('conclusionCard').style.display = 'none';
     document.getElementById('restartBtn').style.display = 'none';
@@ -644,9 +717,20 @@
 
         /* ── GPT 발언 ── */
         addBubble('gpt', '', label, true);
-        const gptUserMsg = r === 1
-          ? `주제: "${topic}"\n\n${mode === 'debate' ? '찬성 측으로서 첫 번째 주장을 시작하세요.' : '이 주제에 대한 첫 번째 의견을 자유롭게 제시하세요.'}`
-          : `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
+        let gptUserMsg;
+        if (mode === 'meeting') {
+          if (r === 1) {
+            gptUserMsg = `회의 안건: "${topic}"\n\n분석가 A로서 이 안건의 핵심 논점과 검토가 필요한 주요 질문을 제시하세요.`;
+          } else if (r === rounds) {
+            gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
+          } else {
+            gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
+          }
+        } else {
+          gptUserMsg = r === 1
+            ? `주제: "${topic}"\n\n${mode === 'debate' ? '찬성 측으로서 첫 번째 주장을 시작하세요.' : '이 주제에 대한 첫 번째 의견을 자유롭게 제시하세요.'}`
+            : `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
+        }
 
         const gptText = await callGPT(gptSys, gptUserMsg, gptModel, openaiKey);
         removeLoading();
@@ -657,9 +741,20 @@
 
         /* ── Gemini 발언 ── */
         addBubble('gem', '', label, true);
-        const gemPrompt = r === 1
-          ? `${gemSys}\n\n주제: "${topic}"\n\nChatGPT의 첫 번째 주장:\n${gptText}\n\n${mode === 'debate' ? '반대 측으로서 반박하세요.' : 'ChatGPT 의견에 반응하고 당신의 관점을 제시하세요.'}`
-          : `${gemSys}\n\n지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
+        let gemPrompt;
+        if (mode === 'meeting') {
+          if (r === 1) {
+            gemPrompt = `${gemSys}\n\n회의 안건: "${topic}"\n\n분석가 A의 첫 발언:\n${gptText}\n\n분석가 B로서 위 의견을 검토하고, 보완하거나 수정이 필요한 부분을 지적한 뒤 우선순위를 제안하세요.`;
+          } else if (r === rounds) {
+            gemPrompt = `${gemSys}\n\n지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
+          } else {
+            gemPrompt = `${gemSys}\n\n지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
+          }
+        } else {
+          gemPrompt = r === 1
+            ? `${gemSys}\n\n주제: "${topic}"\n\nChatGPT의 첫 번째 주장:\n${gptText}\n\n${mode === 'debate' ? '반대 측으로서 반박하세요.' : 'ChatGPT 의견에 반응하고 당신의 관점을 제시하세요.'}`
+            : `${gemSys}\n\n지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
+        }
 
         const gemText = await callGemini(gemPrompt, geminiMdl, geminiKey);
         removeLoading();
@@ -672,14 +767,19 @@
         document.getElementById('roundDisplay').textContent = '결론 정리 중...';
         addBubble('gpt', '', '결론', true);
 
-        const conclusionPrompt = `지금까지의 토론 내용:\n\n${historyText()}\n\n위 토론을 바탕으로 다음 형식으로 최종 결론을 작성하세요:
-1. 양측의 핵심 주장 요약
-2. 공통점 및 남아 있는 이견
-3. 종합적인 결론 또는 시사점
-(총 6~8문장으로 객관적이고 균형 있게 작성)`;
+        let conclusionSystemPrompt, conclusionPrompt;
+        if (mode === 'meeting') {
+          conclusionSystemPrompt = '당신은 회의 결과를 경영진에게 보고하는 실무 담당자입니다. 회의 내용을 토대로 명확한 결론과 실행 가능한 권고안을 작성하세요. 반드시 한국어로 응답하세요.';
+          conclusionPrompt = `회의 안건: ${topic}\n\n회의 내용:\n\n${historyText()}\n\n위 회의 결과를 바탕으로 다음 형식의 보고서를 작성하세요:\n1. 배경 및 핵심 논의 사항\n2. 주요 검토 내용 (합의점 및 남은 쟁점)\n3. 최종 결론 및 권고안\n4. 향후 액션 아이템\n(간결하고 실무적인 보고서 어투로 작성)`;
+          document.getElementById('conclusionCard').querySelector('h3').textContent = '📋 회의 결과 보고서';
+        } else {
+          conclusionSystemPrompt = '당신은 AI 토론의 중립적인 정리자입니다. 토론 내용을 객관적으로 요약하고 결론을 도출하세요. 한국어로 응답하세요.';
+          conclusionPrompt = `지금까지의 토론 내용:\n\n${historyText()}\n\n위 토론을 바탕으로 다음 형식으로 최종 결론을 작성하세요:\n1. 양측의 핵심 주장 요약\n2. 공통점 및 남아 있는 이견\n3. 종합적인 결론 또는 시사점\n(총 6~8문장으로 객관적이고 균형 있게 작성)`;
+          document.getElementById('conclusionCard').querySelector('h3').textContent = '📋 토론 결론 (GPT 정리)';
+        }
 
         const conclusion = await callGPT(
-          '당신은 AI 토론의 중립적인 정리자입니다. 토론 내용을 객관적으로 요약하고 결론을 도출하세요. 한국어로 응답하세요.',
+          conclusionSystemPrompt,
           conclusionPrompt,
           gptModel,
           openaiKey

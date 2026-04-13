@@ -255,6 +255,9 @@
       flex: 1;
       flex-direction: column;
       min-height: 0;
+      /* 우측 패널이 뷰포트를 넘지 않게 — 길면 패널 전체 스크롤 */
+      max-height: calc(100vh - 6rem);
+      overflow-y: auto;
     }
     .debate-area.visible {
       display: flex;
@@ -291,9 +294,11 @@
       display: flex;
       flex-direction: column;
       gap: 1.1rem;
-      flex: 1;
+      flex: 1 1 auto;
       overflow-y: auto;
-      min-height: 12rem;
+      min-height: 8rem;
+      /* 긴 회의 시 메시지가 뷰포트를 다 먹지 않도록 상한 — 내부 스크롤로 처리 */
+      max-height: min(52vh, calc(100vh - 15rem));
       padding-right: 0.35rem;
     }
 
@@ -395,6 +400,7 @@
       flex-shrink: 0;
       display: none;
       animation: fadeUp 0.4s ease;
+      scroll-margin-top: 0.75rem;
     }
 
     .conclusion-card h3 {
@@ -486,6 +492,12 @@
       .msg-wrap.claude { margin-left: 0; max-width: 95%; }
       .msg-wrap { max-width: 95%; }
       .header h1 { font-size: 1.4rem; }
+      .messages {
+        max-height: min(40vh, calc(100vh - 12rem));
+      }
+      .debate-area {
+        max-height: calc(100vh - 4.5rem);
+      }
     }
   </style>
 </head>
@@ -548,8 +560,8 @@
         <div class="form-group" style="margin-top: 0.8rem;">
           <label>모델</label>
           <select id="gptModel">
-            <option value="gpt-5.3-chat-latest" selected>Instant 5.3 · 모든 채팅 (gpt-5.3-chat-latest)</option>
-            <option value="gpt-5.4-mini">5.4 mini · 저렴·품질 균형 (gpt-5.4-mini)</option>
+            <option value="gpt-5.3-chat-latest">Instant 5.3 · 모든 채팅 (gpt-5.3-chat-latest)</option>
+            <option value="gpt-5.4-mini" selected>5.4 mini · 저렴·품질 균형 (gpt-5.4-mini)</option>
             <option value="gpt-5.4">Thinking 5.4 · 복잡한 질문 (gpt-5.4)</option>
           </select>
         </div>
@@ -565,8 +577,8 @@
         <div class="form-group" style="margin-top: 0.8rem;">
           <label>모델</label>
           <select id="geminiModel">
-            <option value="gemini-3-flash-preview__minimal">빠른 모델 · 빠르게 답변 (3 Flash)</option>
-            <option value="gemini-3-flash-preview__high" selected>사고 모델 · 복잡한 문제 해결 (3 Flash)</option>
+            <option value="gemini-3-flash-preview__minimal" selected>빠른 모델 · 빠르게 답변 (3 Flash)</option>
+            <option value="gemini-3-flash-preview__high">사고 모델 · 복잡한 문제 해결 (3 Flash)</option>
             <option value="gemini-3.1-pro-preview">Pro · 고급 수학·코딩 (3.1 Pro)</option>
           </select>
         </div>
@@ -582,8 +594,8 @@
         <div class="form-group" style="margin-top: 0.8rem;">
           <label>모델</label>
           <select id="claudeModel">
-            <option value="claude-sonnet-4-6" selected>Claude Sonnet 4.6 (균형)</option>
-            <option value="claude-haiku-4-5">Claude Haiku 4.5 (빠름)</option>
+            <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (균형)</option>
+            <option value="claude-haiku-4-5" selected>Claude Haiku 4.5 (빠름)</option>
             <option value="claude-opus-4-6">Claude Opus 4.6 (최고 성능)</option>
           </select>
         </div>
@@ -1133,6 +1145,16 @@
     return '\n\n[회의 단계 — 중반] 이견은 근거와 함께 다루고, 반박에는 실행 가능한 대안을 함께 제시하세요.';
   }
 
+  /** 결론 카드가 긴 메시지 목록 아래로 밀려 제목만 보일 때 대비해 스크롤 정렬 */
+  function scrollConclusionIntoView() {
+    const card = document.getElementById('conclusionCard');
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        card.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
+      });
+    });
+  }
+
   /** 토론·회의 기록(historyText)을 바탕으로 GPT가 결론·보고서를 작성합니다. */
   async function runConclusionStep(topic, mode, participants3, gptModel, openaiKey) {
     document.getElementById('roundDisplay').textContent = '결론 정리 중...';
@@ -1161,7 +1183,7 @@
     removeLoading();
     document.getElementById('conclusionText').textContent = conclusion;
     document.getElementById('conclusionCard').style.display = 'block';
-    document.getElementById('conclusionCard').scrollIntoView({ behavior: 'smooth' });
+    scrollConclusionIntoView();
   }
 
   /* ────────────────────────────────

@@ -401,9 +401,9 @@
         <div class="form-group" style="margin-top: 0.8rem;">
           <label>모델</label>
           <select id="geminiModel">
-            <option value="gemini-2.5-flash" selected>gemini-2.5-flash (권장·빠름)</option>
-            <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (저렴)</option>
-            <option value="gemini-2.5-pro">gemini-2.5-pro (고품질)</option>
+            <option value="gemini-3-flash-preview__minimal">빠른 모델 · 빠르게 답변 (3 Flash)</option>
+            <option value="gemini-3-flash-preview__high" selected>사고 모델 · 복잡한 문제 해결 (3 Flash)</option>
+            <option value="gemini-3.1-pro-preview">Pro · 고급 수학·코딩 (3.1 Pro)</option>
           </select>
         </div>
       </div>
@@ -587,7 +587,27 @@
     return (await res.json()).choices[0].message.content.trim();
   }
 
-  async function callGemini(prompt, model, key) {
+  /** select 값: `모델ID` 또는 `모델ID__thinkingLevel` (Gemini 3 빠른/사고 구분) */
+  function parseGeminiModelSelect(value) {
+    const sep = '__';
+    const i = value.indexOf(sep);
+    if (i === -1) return { model: value, thinkingLevel: null };
+    return {
+      model: value.slice(0, i),
+      thinkingLevel: value.slice(i + sep.length)
+    };
+  }
+
+  async function callGemini(prompt, modelSelectValue, key) {
+    const { model, thinkingLevel } = parseGeminiModelSelect(modelSelectValue);
+    const generationConfig = {
+      maxOutputTokens: 4096,
+      temperature: 0.8
+    };
+    if (thinkingLevel) {
+      generationConfig.thinkingConfig = { thinkingLevel };
+    }
+
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
       {
@@ -595,7 +615,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 4096, temperature: 0.8 }
+          generationConfig
         })
       }
     );

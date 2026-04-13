@@ -379,6 +379,20 @@ async function runConclusionStep(topic, mode, participants3, gptModel, openaiKey
   document.getElementById('roundDisplay').textContent = '결론 정리 중...';
   addBubble('gpt', '', '결론', true);
 
+  // 결론 직전: 팩트체크 1회 (SerpAPI 검색 + GPT 판정)
+  try {
+    const factCard = document.getElementById('factCheckCard');
+    if (factCard) {
+      factCard.querySelector('h3').textContent = '📎 팩트체크 & 출처';
+      setFactCheckVisible(true);
+    }
+    await runFactCheckStep(topic, mode, gptModel, openaiKey);
+    const factCard2 = document.getElementById('factCheckCard');
+    factCard2?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (_) {
+    // 팩트체크 실패해도 결론은 진행
+  }
+
   let conclusionSystemPrompt;
   let conclusionPrompt;
   if (mode === 'meeting') {
@@ -442,6 +456,7 @@ async function startDebate() {
   document.querySelector('.topic-label').textContent = mode === 'meeting' ? '회의 안건' : '토론 주제';
   document.getElementById('messages').innerHTML = '';
   document.getElementById('conclusionCard').style.display = 'none';
+  setFactCheckVisible(false);
   document.getElementById('restartBtn').style.display = 'none';
   document.getElementById('saveBtn').style.display = 'none';
   document.getElementById('statusBadge').className = 'status-badge running';
@@ -714,6 +729,129 @@ function historyApi(path) {
   return `${HISTORY_API_BASE}${path}`;
 }
 
+function setFactCheckVisible(visible) {
+  const card = document.getElementById('factCheckCard');
+  if (!card) return;
+  card.style.display = visible ? 'block' : 'none';
+}
+
+function verdictClass(verdict) {
+  const v = String(verdict || '').toLowerCase();
+  if (v.includes('근거 있음') || v.includes('supported')) return 'supported';
+  if (v.includes('일부') || v.includes('partial')) return 'partial';
+  if (v.includes('반박') || v.includes('contradicted')) return 'contradicted';
+  return 'unclear';
+}
+
+function renderFactCheckReport(report) {
+  const body = document.getElementById('factCheckBody');
+  if (!body) return;
+
+  const items = Array.isArray(report?.items) ? report.items : [];
+  const notes = Array.isArray(report?.notes) ? report.notes : [];
+
+  if (items.length === 0) {
+    body.innerHTML = '<div class="hint">검증할 만한 주장(팩트)이 발견되지 않았습니다.</div>';
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'factcheck-list';
+
+  items.forEach((it) => {
+    const claim = String(it.claim || '').trim();
+    const verdict = String(it.verdict || '불확실').trim();
+    const reason = String(it.reason || '').trim();
+    const sources = Array.isArray(it.sources) ? it.sources : [];
+
+    const wrap = document.createElement('div');
+    wrap.className = 'factcheck-item';
+    wrap.innerHTML = `
+      <div class="factcheck-head">
+        <div class="factcheck-claim">${esc(claim)}</div>
+        <div class="factcheck-verdict ${verdictClass(verdict)}">${esc(verdict)}</div>
+      </div>
+      <div class="factcheck-reason">${esc(reason)}</div>
+      <div class="factcheck-sources"></div>
+    `;
+    const srcEl = wrap.querySelector('.factcheck-sources');
+    sources.slice(0, 3).forEach((s) => {
+      const a = document.createElement('a');
+      a.href = s.url || s.link || '#';
+      a.target = '_blank';
+      a.rel = 'noreferrer';
+      a.textContent = s.title || s.url || s.link || '';
+      srcEl.appendChild(a);
+    });
+    list.appendChild(wrap);
+  });
+
+  body.innerHTML = '';
+  body.appendChild(list);
+  if (notes.length) {
+    const note = document.createElement('div');
+    note.className = 'hint';
+    note.textContent = `참고: ${notes.join(' / ')}`;
+    body.appendChild(note);
+  }
+}
+
+async function runFactCheckStep(topic, mode, gptModel, openaiKey) {
+  setFactCheckVisible(true);
+  const body = document.getElementById('factCheckBody');
+  if (body) body.innerHTML = '<div class="hint">팩트체크 중... (검색 결과를 기반으로 요약합니다)</div>';
+
+  const claimExtractorSys = '당신은 토론 기록에서 검증 가능한 사실 주장(팩트)만 뽑는 도우미입니다. 반드시 한국어로, 반드시 JSON만 출력하세요.';
+  const claimExtractorUser = `토론 주제: ${topic}\n토론 방식: ${mode}\n\n토론 기록:\n\n${historyText()}\n\n위 토론에서 \"검증 가능한 주장\"만 최대 8개 뽑으세요.\n규칙:\n- 의견/가치판단/신학적 해석/비유/정서 표현은 제외\n- 수치/연도/법·정책 내용/인용/사건 사실처럼 검색으로 확인 가능한 것만 포함\n- 각 주장마다 검색용 query도 함께 작성\n\n출력 형식(JSON):\n{\n  \"claims\": [\n    { \"claim\": \"...\", \"query\": \"...\", \"priority\": 1 }\n  ]\n}\n`;
+
+  let extracted;
+  try {
+    const raw = await callGPT(claimExtractorSys, claimExtractorUser, gptModel, openaiKey);
+    extracted = JSON.parse(raw);
+  } catch (e) {
+    if (body) body.innerHTML = `<div class="hint">팩트 추출 실패: ${esc(e.message || String(e))}</div>`;
+    return null;
+  }
+
+  const claims = Array.isArray(extracted?.claims) ? extracted.claims : [];
+  const topClaims = claims
+    .filter(c => c && c.claim && c.query)
+    .slice(0, 8)
+    .map(c => ({ claim: String(c.claim).trim(), query: String(c.query).trim(), priority: Number(c.priority || 1) }));
+
+  if (topClaims.length === 0) {
+    if (body) body.innerHTML = '<div class="hint">검증 가능한 주장(팩트)이 발견되지 않았습니다.</div>';
+    return { items: [], notes: ['검증 가능한 주장 없음'] };
+  }
+
+  const searched = [];
+  for (const c of topClaims) {
+    try {
+      const res = await fetch(historyApi(`/api/search?q=${encodeURIComponent(c.query)}`));
+      const json = await res.json().catch(() => null);
+      const results = Array.isArray(json?.results) ? json.results : [];
+      searched.push({ ...c, results });
+    } catch (_) {
+      searched.push({ ...c, results: [] });
+    }
+  }
+
+  const judgeSys = '당신은 사실검증 리포트를 작성하는 중립적인 분석가입니다. 반드시 한국어로, 반드시 JSON만 출력하세요.';
+  const judgeUser = `토론 주제: ${topic}\n\n아래는 토론에서 뽑은 \"검증 가능한 주장\"과, 각 주장에 대한 웹 검색 결과(제목/요약/링크)입니다.\n검색 결과만을 근거로 판정하세요. 확실하지 않으면 \"불확실\"로 두세요.\n\n판정 라벨(한국어 중 택1): \"근거 있음\" | \"일부 근거\" | \"불확실\" | \"반박됨\"\n\n입력:\n${JSON.stringify({ claims: searched }, null, 2)}\n\n출력 형식(JSON):\n{\n  \"items\": [\n    {\n      \"claim\": \"...\",\n      \"verdict\": \"근거 있음|일부 근거|불확실|반박됨\",\n      \"reason\": \"1~2문장\",\n      \"sources\": [ {\"title\":\"...\",\"url\":\"...\"} ]\n    }\n  ],\n  \"notes\": [\"주의사항...\"]\n}\n`;
+
+  let report;
+  try {
+    const raw = await callGPT(judgeSys, judgeUser, gptModel, openaiKey);
+    report = JSON.parse(raw);
+  } catch (e) {
+    if (body) body.innerHTML = `<div class="hint">팩트체크 리포트 생성 실패: ${esc(e.message || String(e))}</div>`;
+    return null;
+  }
+
+  renderFactCheckReport(report);
+  return report;
+}
+
 async function saveConversation() {
   if (!debateHistory.length) return alert('저장할 대화 내용이 없습니다.');
   const btn = document.getElementById('saveBtn');
@@ -864,6 +1002,7 @@ function setRightPanelTab(tab) {
 function init() {
   loadApiKeysFromStorage();
   syncParticipantUi();
+  setFactCheckVisible(false);
 
   document.getElementById('openaiKey')?.addEventListener('change', saveApiKeysToStorage);
   document.getElementById('geminiKey')?.addEventListener('change', saveApiKeysToStorage);

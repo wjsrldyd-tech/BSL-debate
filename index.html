@@ -307,6 +307,16 @@
     .msg-wrap.gpt { align-self: flex-start; }
     .msg-wrap.gem { align-self: flex-end; flex-direction: row-reverse; }
     .msg-wrap.claude { align-self: flex-start; margin-left: 8%; max-width: 78%; }
+    .msg-wrap.user {
+      align-self: flex-end;
+      flex-direction: row-reverse;
+      max-width: 84%;
+    }
+    .avatar.user { background: #4c1d95; }
+    .msg-wrap.user .bubble-text {
+      border-right: 3px solid #a78bfa;
+      background: #221835;
+    }
 
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(8px); }
@@ -402,6 +412,57 @@
       font-size: 0.9rem;
       white-space: pre-wrap;
     }
+
+    .user-intervention-card {
+      background: #1a1528;
+      border: 1px solid #6d28d9;
+      border-radius: 14px;
+      padding: 1.25rem 1.35rem;
+      margin-top: 1rem;
+      flex-shrink: 0;
+      display: none;
+    }
+    .user-intervention-card h3 {
+      color: #c4b5fd;
+      margin-bottom: 0.65rem;
+      font-size: 0.92rem;
+      font-weight: 600;
+    }
+    .user-intervention-card .hint-line {
+      font-size: 0.78rem;
+      color: #64748b;
+      margin-bottom: 0.75rem;
+      line-height: 1.5;
+    }
+    .user-intervention-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem 1rem;
+      margin-top: 0.75rem;
+    }
+    .user-intervention-row label {
+      font-size: 0.82rem;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .continue-btn {
+      width: 100%;
+      margin-top: 0.85rem;
+      padding: 0.75rem;
+      background: linear-gradient(135deg, #6d28d9, #4c1d95);
+      border: none;
+      border-radius: 10px;
+      color: #f5f3ff;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .continue-btn:hover:not(:disabled) { opacity: 0.92; }
+    .continue-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
     @media (max-width: 900px) {
       .app-layout {
@@ -567,6 +628,32 @@
       <p id="conclusionText"></p>
     </div>
 
+    <div class="user-intervention-card" id="userInterventionCard">
+      <h3>✋ 사용자 반박 · 추가 의견</h3>
+      <p class="hint-line">결론에 동의하지 않거나 현실적인 반박을 넣으면, 아래 문구가 회의 기록에 추가된 뒤 AI들이 추가 라운드를 진행합니다. 이전 대화는 유지됩니다.</p>
+      <div class="form-group">
+        <label for="userRebuttalInput">반박 또는 추가 전제</label>
+        <textarea id="userRebuttalInput" placeholder="예: 숙제는 학원에 오지 않는 날 하는 것이 전제인데, 학원 내 완료는 수업 연장일 뿐이라…" style="min-height: 100px;"></textarea>
+      </div>
+      <div class="user-intervention-row">
+        <div class="form-group" style="margin: 0; min-width: 140px;">
+          <label for="extraRoundsSelect">추가 라운드</label>
+          <select id="extraRoundsSelect">
+            <option value="1">1 라운드</option>
+            <option value="2" selected>2 라운드</option>
+            <option value="3">3 라운드</option>
+          </select>
+        </div>
+        <label>
+          <input type="checkbox" id="regenerateConclusionCheck" checked>
+          추가 라운드 후 결론 다시 정리
+        </label>
+      </div>
+      <button type="button" class="continue-btn" id="continueAfterUserBtn" onclick="continueAfterUserRebuttal()">
+        반박 추가 후 재개
+      </button>
+    </div>
+
     <button class="start-btn restart-btn" id="restartBtn"
             style="display:none;" onclick="restart()">
       🔄 새 토론 시작
@@ -638,6 +725,10 @@
   ──────────────────────────────── */
   let debateHistory = [];
   let aborted = false;
+  /** 재개(사용자 반박) 시 동일 세션으로 쓰는 설정 — 토론 시작 시 설정, 새 토론 시 초기화 */
+  let currentSessionTopic = '';
+  let currentSessionMode = '';
+  let currentSessionParticipants3 = false;
 
   /* ────────────────────────────────
      유틸
@@ -689,6 +780,22 @@
   function removeLoading() {
     const el = document.getElementById('loading-bubble');
     if (el) el.remove();
+  }
+
+  /** 사용자(인간) 발언 버블 — AI와 구분 */
+  function addUserBubble(text, roundLabel) {
+    const container = document.getElementById('messages');
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-wrap user';
+    wrap.innerHTML = `
+      <div class="avatar user">👤</div>
+      <div class="bubble-inner">
+        <div class="bubble-meta">사용자 · ${roundLabel}</div>
+        <div class="bubble-text">${esc(text)}</div>
+      </div>`;
+    container.appendChild(wrap);
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    return wrap;
   }
 
   /* ────────────────────────────────
@@ -1012,6 +1119,37 @@
     return '\n\n[회의 단계 — 중반] 이견은 근거와 함께 다루고, 반박에는 실행 가능한 대안을 함께 제시하세요.';
   }
 
+  /** 토론·회의 기록(historyText)을 바탕으로 GPT가 결론·보고서를 작성합니다. */
+  async function runConclusionStep(topic, mode, participants3, gptModel, openaiKey) {
+    document.getElementById('roundDisplay').textContent = '결론 정리 중...';
+    addBubble('gpt', '', '결론', true);
+
+    let conclusionSystemPrompt, conclusionPrompt;
+    if (mode === 'meeting') {
+      conclusionSystemPrompt = participants3
+        ? '당신은 회의 결과를 경영진에게 보고하는 실무 담당자입니다. ChatGPT·Gemini·Claude 세 참가자의 회의 내용과, 기록에 포함된 사용자(인간)의 반박·추가 의견이 있다면 그것까지 반영해 명확한 결론과 실행 가능한 권고안을 작성하세요. 반드시 한국어로 응답하세요.'
+        : '당신은 회의 결과를 경영진에게 보고하는 실무 담당자입니다. 회의 내용과 사용자(인간)의 반박·추가 의견이 기록에 있으면 반영하여 명확한 결론과 실행 가능한 권고안을 작성하세요. 반드시 한국어로 응답하세요.';
+      conclusionPrompt = `회의 안건: ${topic}\n\n회의 내용:\n\n${historyText()}\n\n위 회의를 바탕으로 경영진 보고용 요약을 작성하세요. 다음 항목을 빠짐없이 다루되 중복은 줄이고 실무 톤으로 작성하세요:\n1. 배경 및 핵심 논의 사항\n2. 합의된 점과 남은 쟁점\n3. 실행 방안 (구체적 행동·담당·시기 등, 가능한 범위에서)\n4. 기대 효과\n5. 리스크 및 보완점\n6. 향후 액션 아이템 (실행 가능한 항목)`;
+      document.getElementById('conclusionCard').querySelector('h3').textContent = '📋 회의 결과 보고서';
+    } else {
+      conclusionSystemPrompt = '당신은 AI 토론의 중립적인 정리자입니다. 토론 내용과 사용자(인간)의 반박이 기록에 있으면 반영하여 객관적으로 요약하고 결론을 도출하세요. 한국어로 응답하세요.';
+      conclusionPrompt = `지금까지의 토론 내용:\n\n${historyText()}\n\n위 토론을 바탕으로 다음 형식으로 최종 결론을 작성하세요:\n1. 양측의 핵심 주장 요약\n2. 공통점 및 남아 있는 이견\n3. 종합적인 결론 또는 시사점\n(총 6~8문장으로 객관적이고 균형 있게 작성)`;
+      document.getElementById('conclusionCard').querySelector('h3').textContent = '📋 토론 결론 (GPT 정리)';
+    }
+
+    const conclusion = await callGPT(
+      conclusionSystemPrompt,
+      conclusionPrompt,
+      gptModel,
+      openaiKey
+    );
+
+    removeLoading();
+    document.getElementById('conclusionText').textContent = conclusion;
+    document.getElementById('conclusionCard').style.display = 'block';
+    document.getElementById('conclusionCard').scrollIntoView({ behavior: 'smooth' });
+  }
+
   /* ────────────────────────────────
      메인 토론 루프
   ──────────────────────────────── */
@@ -1036,8 +1174,15 @@
     if (!geminiKey) return showError('Google AI API 키를 입력해주세요.');
     if (participants3 && !anthropicKey) return showError('3인 토론은 Anthropic(Claude) API 키를 입력해주세요.');
 
+    currentSessionTopic = topic;
+    currentSessionMode = mode;
+    currentSessionParticipants3 = participants3;
+
     aborted = false;
     debateHistory = [];
+
+    document.getElementById('userInterventionCard').style.display = 'none';
+    document.getElementById('userRebuttalInput').value = '';
 
     const btn = document.getElementById('startBtn');
     btn.disabled = true;
@@ -1158,38 +1303,12 @@
       }
 
       if (!aborted) {
-        /* ── 결론 도출 ── */
-        document.getElementById('roundDisplay').textContent = '결론 정리 중...';
-        addBubble('gpt', '', '결론', true);
-
-        let conclusionSystemPrompt, conclusionPrompt;
-        if (mode === 'meeting') {
-          conclusionSystemPrompt = participants3
-            ? '당신은 회의 결과를 경영진에게 보고하는 실무 담당자입니다. ChatGPT·Gemini·Claude 세 참가자의 회의 내용을 토대로 명확한 결론과 실행 가능한 권고안을 작성하세요. 반드시 한국어로 응답하세요.'
-            : '당신은 회의 결과를 경영진에게 보고하는 실무 담당자입니다. 회의 내용을 토대로 명확한 결론과 실행 가능한 권고안을 작성하세요. 반드시 한국어로 응답하세요.';
-          conclusionPrompt = `회의 안건: ${topic}\n\n회의 내용:\n\n${historyText()}\n\n위 회의를 바탕으로 경영진 보고용 요약을 작성하세요. 다음 항목을 빠짐없이 다루되 중복은 줄이고 실무 톤으로 작성하세요:\n1. 배경 및 핵심 논의 사항\n2. 합의된 점과 남은 쟁점\n3. 실행 방안 (구체적 행동·담당·시기 등, 가능한 범위에서)\n4. 기대 효과\n5. 리스크 및 보완점\n6. 향후 액션 아이템 (실행 가능한 항목)`;
-          document.getElementById('conclusionCard').querySelector('h3').textContent = '📋 회의 결과 보고서';
-        } else {
-          conclusionSystemPrompt = '당신은 AI 토론의 중립적인 정리자입니다. 토론 내용을 객관적으로 요약하고 결론을 도출하세요. 한국어로 응답하세요.';
-          conclusionPrompt = `지금까지의 토론 내용:\n\n${historyText()}\n\n위 토론을 바탕으로 다음 형식으로 최종 결론을 작성하세요:\n1. 양측의 핵심 주장 요약\n2. 공통점 및 남아 있는 이견\n3. 종합적인 결론 또는 시사점\n(총 6~8문장으로 객관적이고 균형 있게 작성)`;
-          document.getElementById('conclusionCard').querySelector('h3').textContent = '📋 토론 결론 (GPT 정리)';
-        }
-
-        const conclusion = await callGPT(
-          conclusionSystemPrompt,
-          conclusionPrompt,
-          gptModel,
-          openaiKey
-        );
-
-        removeLoading();
-        document.getElementById('conclusionText').textContent = conclusion;
-        document.getElementById('conclusionCard').style.display = 'block';
-        document.getElementById('conclusionCard').scrollIntoView({ behavior: 'smooth' });
+        await runConclusionStep(topic, mode, participants3, gptModel, openaiKey);
 
         document.getElementById('statusBadge').className = 'status-badge done';
         document.getElementById('statusBadge').textContent = '완료';
         document.getElementById('roundDisplay').textContent = `${document.getElementById('roundsSelect').value} / ${document.getElementById('roundsSelect').value} 라운드`;
+        document.getElementById('userInterventionCard').style.display = 'block';
       }
 
     } catch (err) {
@@ -1204,12 +1323,181 @@
     }
   }
 
+  /**
+   * 결론 도출 후 사용자 반박을 기록에 넣고 추가 라운드(GPT→Gemini→Claude)를 진행합니다.
+   * 이전 발언·결론은 유지되며, 선택 시 결론만 GPT가 다시 정리합니다.
+   */
+  async function continueAfterUserRebuttal() {
+    hideError();
+
+    const userText = document.getElementById('userRebuttalInput').value.trim();
+    if (!userText) return showError('반박 또는 추가 의견을 입력해 주세요.');
+    if (!currentSessionTopic) return showError('먼저 토론을 완료한 뒤 사용할 수 있습니다.');
+
+    const openaiKey = document.getElementById('openaiKey').value.trim();
+    const geminiKey = document.getElementById('geminiKey').value.trim();
+    const anthropicKey = document.getElementById('anthropicKey').value.trim();
+    const gptModel = document.getElementById('gptModel').value;
+    const geminiMdl = document.getElementById('geminiModel').value;
+    const claudeModel = document.getElementById('claudeModel').value;
+    const extraRounds = parseInt(document.getElementById('extraRoundsSelect').value, 10) || 2;
+    const regenConclusion = document.getElementById('regenerateConclusionCheck').checked;
+
+    if (!openaiKey) return showError('OpenAI API 키를 입력해주세요.');
+    if (!geminiKey) return showError('Google AI API 키를 입력해주세요.');
+    if (currentSessionParticipants3 && !anthropicKey) {
+      return showError('3인 토론은 Anthropic(Claude) API 키를 입력해주세요.');
+    }
+
+    saveApiKeysToStorage();
+
+    const topic = currentSessionTopic;
+    const mode = currentSessionMode;
+    const participants3 = currentSessionParticipants3;
+
+    const userLabel = '사용자 반박';
+    debateHistory.push({ name: '사용자', roundLabel: userLabel, text: userText });
+    addUserBubble(userText, userLabel);
+
+    const gptSys = buildGPTSystem(topic, mode);
+    const gemSys = buildGeminiSystem(topic, mode);
+    const claudeSys = participants3 ? buildClaudeSystem(topic, mode) : '';
+
+    const contBtn = document.getElementById('continueAfterUserBtn');
+    contBtn.disabled = true;
+    contBtn.textContent = '⏳ 추가 라운드 진행 중...';
+    document.getElementById('statusBadge').className = 'status-badge running';
+    document.getElementById('statusBadge').textContent = '진행 중';
+    document.getElementById('userInterventionCard').style.display = 'none';
+
+    aborted = false;
+
+    try {
+      for (let r = 1; r <= extraRounds; r++) {
+        if (aborted) break;
+        const label = `추가 ${r} / ${extraRounds} 라운드`;
+        document.getElementById('roundDisplay').textContent = label;
+
+        addBubble('gpt', '', label, true);
+        let gptUserMsg;
+        if (mode === 'meeting') {
+          if (extraRounds === 1) {
+            gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n직전에 사용자(인간)의 반박·추가 의견이 기록에 포함되어 있습니다. 이를 최우선으로 반영하세요. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요. 상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하세요.`;
+            gptUserMsg += '\n\n[회의 단계 — 마무리] 이견을 좁히고 실행 가능한 결론 쪽으로 모으세요. 실행·효과·리스크의 체계적 정리는 회의 종료 후 요약 보고서에서 합니다.';
+          } else if (r === 1) {
+            gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n직전에 사용자(인간)의 반박·추가 의견이 기록에 포함되어 있습니다. 이를 최우선으로 반영하세요. 상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
+            gptUserMsg += meetingPhaseHint(r, extraRounds);
+          } else if (r === extraRounds) {
+            gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
+            gptUserMsg += meetingPhaseHint(r, extraRounds);
+          } else {
+            gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
+            gptUserMsg += meetingPhaseHint(r, extraRounds);
+          }
+        } else {
+          gptUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
+        }
+
+        const gptText = await callGPT(gptSys, gptUserMsg, gptModel, openaiKey);
+        removeLoading();
+        addBubble('gpt', gptText, label);
+        debateHistory.push({ name: 'ChatGPT', roundLabel: label, text: gptText });
+
+        if (aborted) break;
+
+        addBubble('gem', '', label, true);
+        let gemPrompt;
+        if (mode === 'meeting') {
+          if (extraRounds === 1) {
+            gemPrompt = `${gemSys}\n\n지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
+            gemPrompt += '\n\n[회의 단계 — 마무리] 이견을 좁히고 실행 가능한 결론 쪽으로 모으세요. 실행·효과·리스크의 체계적 정리는 회의 종료 후 요약 보고서에서 합니다.';
+          } else if (r === extraRounds) {
+            gemPrompt = `${gemSys}\n\n지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
+            gemPrompt += meetingPhaseHint(r, extraRounds);
+          } else {
+            gemPrompt = `${gemSys}\n\n지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
+            gemPrompt += meetingPhaseHint(r, extraRounds);
+          }
+        } else {
+          gemPrompt = `${gemSys}\n\n지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
+        }
+
+        const gemText = await callGeminiWithRetry(gemPrompt, geminiMdl, geminiKey, label);
+        removeLoading();
+        addBubble('gem', gemText, label);
+        debateHistory.push({ name: 'Gemini', roundLabel: label, text: gemText });
+
+        if (aborted) break;
+
+        if (participants3) {
+          addBubble('claude', '', label, true);
+          let claudeUserMsg;
+          if (mode === 'meeting') {
+            if (extraRounds === 1) {
+              claudeUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
+              claudeUserMsg += '\n\n[회의 단계 — 마무리] 이견을 좁히고 실행 가능한 결론 쪽으로 모으세요. 실행·효과·리스크의 체계적 정리는 회의 종료 후 요약 보고서에서 합니다.';
+            } else if (r === extraRounds) {
+              claudeUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
+              claudeUserMsg += meetingPhaseHint(r, extraRounds);
+            } else {
+              claudeUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
+              claudeUserMsg += meetingPhaseHint(r, extraRounds);
+            }
+          } else if (mode === 'debate') {
+            if (r === extraRounds) {
+              claudeUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n마지막 발언입니다. 양측을 정리하고 남은 쟁점과 시사점을 제시하세요.`;
+            } else {
+              claudeUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
+            }
+          } else {
+            if (r === extraRounds) {
+              claudeUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n마지막 발언입니다. 논의를 정리하고 종합 의견을 제시하세요.`;
+            } else {
+              claudeUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
+            }
+          }
+
+          const claudeText = await callClaudeWithRetry(claudeSys, claudeUserMsg, claudeModel, anthropicKey, label);
+          removeLoading();
+          addBubble('claude', claudeText, label);
+          debateHistory.push({ name: 'Claude', roundLabel: label, text: claudeText });
+        }
+      }
+
+      if (!aborted && regenConclusion) {
+        await runConclusionStep(topic, mode, participants3, gptModel, openaiKey);
+      }
+
+      if (!aborted) {
+        document.getElementById('statusBadge').className = 'status-badge done';
+        document.getElementById('statusBadge').textContent = '완료';
+        document.getElementById('roundDisplay').textContent = `추가 ${extraRounds} / ${extraRounds} 라운드`;
+        document.getElementById('userInterventionCard').style.display = 'block';
+        document.getElementById('userRebuttalInput').value = '';
+      }
+    } catch (err) {
+      removeLoading();
+      showError(err.message);
+      document.getElementById('statusBadge').className = 'status-badge error';
+      document.getElementById('statusBadge').textContent = '오류';
+      document.getElementById('userInterventionCard').style.display = 'block';
+    } finally {
+      contBtn.disabled = false;
+      contBtn.textContent = '반박 추가 후 재개';
+    }
+  }
+
   function restart() {
     aborted = true;
     debateHistory = [];
+    currentSessionTopic = '';
+    currentSessionMode = '';
+    currentSessionParticipants3 = false;
     document.getElementById('debateColumn').classList.remove('debate-active');
     document.getElementById('debateArea').classList.remove('visible');
     document.getElementById('messages').innerHTML = '';
+    document.getElementById('userInterventionCard').style.display = 'none';
+    document.getElementById('userRebuttalInput').value = '';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 </script>

@@ -393,6 +393,58 @@ function meetingPhaseHint(r, rounds) {
   return '\n\n[회의 단계 — 중반] 이견은 근거와 함께 다루고, 반박에는 실행 가능한 대안을 함께 제시하세요.';
 }
 
+function rotatedOrder(list, roundNumber) {
+  const n = Array.isArray(list) ? list.length : 0;
+  if (n <= 1) return Array.isArray(list) ? list.slice() : [];
+  const start = (Math.max(1, Number(roundNumber) || 1) - 1) % n;
+  return list.slice(start).concat(list.slice(0, start));
+}
+
+function isFirstTurn() {
+  return !Array.isArray(debateHistory) || debateHistory.length === 0;
+}
+
+function buildMeetingInitialPrompt(role, topic) {
+  if (role === 'gpt') {
+    return `회의 안건: "${topic}"\n\n기획팀장으로서 이 안건의 핵심 논점과 검토가 필요한 주요 질문을 제시하세요.`;
+  }
+  if (role === 'gem') {
+    return `회의 안건: "${topic}"\n\n홍보팀장으로서 이 안건의 대외 커뮤니케이션·현장 적용 관점에서 핵심 논점과 검토가 필요한 주요 질문을 제시하세요.`;
+  }
+  return `회의 안건: "${topic}"\n\n개발팀장으로서 기술·실행 가능성 관점에서 핵심 논점과 검토가 필요한 주요 질문을 제시하세요.`;
+}
+
+function buildFreeformInitialPrompt(role, topic) {
+  const name = role === 'gpt' ? 'ChatGPT' : role === 'gem' ? 'Gemini' : 'Claude';
+  return `주제: "${topic}"\n\n이 주제에 대한 첫 번째 의견을 ${name}로서 자유롭게 제시하세요.`;
+}
+
+function buildTurnUserMessage({ role, topic, mode, roundIndex, totalRounds }) {
+  const isLastRound = roundIndex === totalRounds;
+  if (mode === 'meeting') {
+    if (isFirstTurn()) {
+      let msg = buildMeetingInitialPrompt(role, topic);
+      msg += meetingPhaseHint(roundIndex, totalRounds);
+      return msg;
+    }
+    if (isLastRound) {
+      let msg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
+      msg += meetingPhaseHint(roundIndex, totalRounds);
+      return msg;
+    }
+    let msg = `지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
+    msg += meetingPhaseHint(roundIndex, totalRounds);
+    return msg;
+  }
+
+  // freeform
+  if (isFirstTurn()) return buildFreeformInitialPrompt(role, topic);
+  if (isLastRound) {
+    return `지금까지의 토론:\n\n${historyText()}\n\n마지막 발언입니다. 논의를 정리하고 종합 의견을 제시하세요.`;
+  }
+  return `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
+}
+
 async function runConclusionStep(topic, mode, participants3, gptModel, openaiKey) {
   document.getElementById('roundDisplay').textContent = '결론 정리 중...';
   addBubble('gpt', '', '결론', true);
@@ -490,64 +542,28 @@ async function startDebate() {
       const label = `${r} / ${rounds} 라운드`;
       document.getElementById('roundDisplay').textContent = label;
 
-      addBubble('gpt', '', label, true);
-      let gptUserMsg;
-      if (mode === 'meeting') {
-        if (r === 1) gptUserMsg = `회의 안건: \"${topic}\"\n\n기획팀장으로서 이 안건의 핵심 논점과 검토가 필요한 주요 질문을 제시하세요.`;
-        else if (r === rounds) gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
-        else gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
-      } else {
-        gptUserMsg = r === 1
-          ? `주제: \"${topic}\"\n\n이 주제에 대한 첫 번째 의견을 자유롭게 제시하세요.`
-          : `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
-      }
-      if (mode === 'meeting') gptUserMsg += meetingPhaseHint(r, rounds);
+      const baseOrder = participants3 ? ['gpt', 'gem', 'claude'] : ['gpt', 'gem'];
+      const order = rotatedOrder(baseOrder, r);
 
-      const gptText = await callGPT(gptSys, gptUserMsg, gptModel, openaiKey);
-      removeLoading();
-      addBubble('gpt', gptText, label);
-      debateHistory.push({ speaker: 'gpt', name: participantName('gpt', mode), roundLabel: label, text: gptText });
+      for (const role of order) {
+        if (aborted) break;
 
-      if (aborted) break;
+        addBubble(role, '', label, true);
+        const userMsg = buildTurnUserMessage({ role, topic, mode, roundIndex: r, totalRounds: rounds });
 
-      addBubble('gem', '', label, true);
-      let gemPrompt;
-      if (mode === 'meeting') {
-        if (r === 1) gemPrompt = `${gemSys}\n\n회의 안건: \"${topic}\"\n\n기획팀장의 첫 발언:\n${gptText}\n\n홍보팀장으로서 위 의견을 검토하고, 보완하거나 수정이 필요한 부분을 지적한 뒤 우선순위를 제안하세요.`;
-        else if (r === rounds) gemPrompt = `${gemSys}\n\n지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
-        else gemPrompt = `${gemSys}\n\n지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
-      } else {
-        gemPrompt = r === 1
-          ? `${gemSys}\n\n주제: \"${topic}\"\n\nChatGPT의 첫 번째 주장:\n${gptText}\n\nChatGPT 의견에 반응하고 당신의 관점을 제시하세요.`
-          : `${gemSys}\n\n지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
-      }
-      if (mode === 'meeting') gemPrompt += meetingPhaseHint(r, rounds);
-
-      const gemText = await callGeminiWithRetry(gemPrompt, geminiMdl, geminiKey, label);
-      removeLoading();
-      addBubble('gem', gemText, label);
-      debateHistory.push({ speaker: 'gem', name: participantName('gem', mode), roundLabel: label, text: gemText });
-
-      if (aborted) break;
-
-      if (participants3) {
-        addBubble('claude', '', label, true);
-        let claudeUserMsg;
-        if (mode === 'meeting') {
-          if (r === 1) claudeUserMsg = `회의 안건: \"${topic}\"\n\n지금까지의 발언:\n\n${historyText()}\n\n개발팀장으로서 기획팀장과 홍보팀장의 논점을 각각 한 문장으로 짚은 뒤, 종합 의견과 합의에 도움이 되는 제안을 하세요.`;
-          else if (r === rounds) claudeUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
-          else claudeUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
+        let text;
+        if (role === 'gpt') {
+          text = await callGPT(gptSys, userMsg, gptModel, openaiKey);
+        } else if (role === 'gem') {
+          const prompt = `${gemSys}\n\n${userMsg}`;
+          text = await callGeminiWithRetry(prompt, geminiMdl, geminiKey, label);
         } else {
-          if (r === 1) claudeUserMsg = `주제: \"${topic}\"\n\n지금까지의 발언:\n\n${historyText()}\n\n앞선 두 참가자의 의견을 반영해 당신의 관점을 제시하세요.`;
-          else if (r === rounds) claudeUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n마지막 발언입니다. 논의를 정리하고 종합 의견을 제시하세요.`;
-          else claudeUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
+          text = await callClaudeWithRetry(claudeSys, userMsg, claudeModel, anthropicKey, label);
         }
-        if (mode === 'meeting') claudeUserMsg += meetingPhaseHint(r, rounds);
 
-        const claudeText = await callClaudeWithRetry(claudeSys, claudeUserMsg, claudeModel, anthropicKey, label);
         removeLoading();
-        addBubble('claude', claudeText, label);
-        debateHistory.push({ speaker: 'claude', name: participantName('claude', mode), roundLabel: label, text: claudeText });
+        addBubble(role, text, label);
+        debateHistory.push({ speaker: role, name: participantName(role, mode), roundLabel: label, text });
       }
     }
 
@@ -620,81 +636,48 @@ async function continueAfterUserRebuttal() {
       const label = `추가 ${r} / ${extraRounds} 라운드`;
       document.getElementById('roundDisplay').textContent = label;
 
-      addBubble('gpt', '', label, true);
-      let gptUserMsg;
-      if (mode === 'meeting') {
-        if (extraRounds === 1) {
-          gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n직전에 ${mode === 'meeting' ? '소장' : '사용자(인간)'}의 반박·추가 의견이 기록에 포함되어 있습니다. 이를 최우선으로 반영하세요. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요. 상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하세요.`;
-          gptUserMsg += '\n\n[회의 단계 — 마무리] 이견을 좁히고 실행 가능한 결론 쪽으로 모으세요. 실행·효과·리스크의 체계적 정리는 회의 종료 후 요약 보고서에서 합니다.';
-        } else if (r === 1) {
-          gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n직전에 ${mode === 'meeting' ? '소장' : '사용자(인간)'}의 반박·추가 의견이 기록에 포함되어 있습니다. 이를 최우선으로 반영하세요. 상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
-          gptUserMsg += meetingPhaseHint(r, extraRounds);
-        } else if (r === extraRounds) {
-          gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
-          gptUserMsg += meetingPhaseHint(r, extraRounds);
-        } else {
-          gptUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
-          gptUserMsg += meetingPhaseHint(r, extraRounds);
-        }
-      } else {
-        gptUserMsg = `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
-      }
+      const baseOrder = participants3 ? ['gpt', 'gem', 'claude'] : ['gpt', 'gem'];
+      const order = rotatedOrder(baseOrder, r);
 
-      const gptText = await callGPT(gptSys, gptUserMsg, gptModel, openaiKey);
-      removeLoading();
-      addBubble('gpt', gptText, label);
-      debateHistory.push({ speaker: 'gpt', name: participantName('gpt', mode), roundLabel: label, text: gptText });
+      for (const role of order) {
+        if (aborted) break;
 
-      if (aborted) break;
+        addBubble(role, '', label, true);
 
-      addBubble('gem', '', label, true);
-      let gemPrompt;
-      if (mode === 'meeting') {
-        if (extraRounds === 1) {
-          gemPrompt = `${gemSys}\n\n지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
-          gemPrompt += '\n\n[회의 단계 — 마무리] 이견을 좁히고 실행 가능한 결론 쪽으로 모으세요. 실행·효과·리스크의 체계적 정리는 회의 종료 후 요약 보고서에서 합니다.';
-        } else if (r === extraRounds) {
-          gemPrompt = `${gemSys}\n\n지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
-          gemPrompt += meetingPhaseHint(r, extraRounds);
-        } else {
-          gemPrompt = `${gemSys}\n\n지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
-          gemPrompt += meetingPhaseHint(r, extraRounds);
-        }
-      } else {
-        gemPrompt = `${gemSys}\n\n지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
-      }
-
-      const gemText = await callGeminiWithRetry(gemPrompt, geminiMdl, geminiKey, label);
-      removeLoading();
-      addBubble('gem', gemText, label);
-      debateHistory.push({ speaker: 'gem', name: participantName('gem', mode), roundLabel: label, text: gemText });
-
-      if (aborted) break;
-
-      if (participants3) {
-        addBubble('claude', '', label, true);
-        let claudeUserMsg;
+        let userMsg;
         if (mode === 'meeting') {
           if (extraRounds === 1) {
-            claudeUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
-            claudeUserMsg += '\n\n[회의 단계 — 마무리] 이견을 좁히고 실행 가능한 결론 쪽으로 모으세요. 실행·효과·리스크의 체계적 정리는 회의 종료 후 요약 보고서에서 합니다.';
+            userMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n직전에 소장의 반박·추가 의견이 기록에 포함되어 있습니다. 이를 최우선으로 반영하세요.\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요. 상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하세요.`;
+            userMsg += '\n\n[회의 단계 — 마무리] 이견을 좁히고 실행 가능한 결론 쪽으로 모으세요. 실행·효과·리스크의 체계적 정리는 회의 종료 후 요약 보고서에서 합니다.';
+          } else if (r === 1) {
+            userMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n직전에 소장의 반박·추가 의견이 기록에 포함되어 있습니다. 이를 최우선으로 반영하세요.\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
+            userMsg += meetingPhaseHint(r, extraRounds);
           } else if (r === extraRounds) {
-            claudeUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
-            claudeUserMsg += meetingPhaseHint(r, extraRounds);
+            userMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n마지막 발언입니다. 이견을 좁히고 합의 가능한 최종 결론을 제안하세요.`;
+            userMsg += meetingPhaseHint(r, extraRounds);
           } else {
-            claudeUserMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
-            claudeUserMsg += meetingPhaseHint(r, extraRounds);
+            userMsg = `지금까지의 회의 내용:\n\n${historyText()}\n\n상대방 발언에 오류나 허점이 있다면 [반박]으로 지적하고, 합의 가능한 방향으로 의견을 발전시키세요.`;
+            userMsg += meetingPhaseHint(r, extraRounds);
           }
         } else {
-          claudeUserMsg = r === extraRounds
+          userMsg = r === extraRounds
             ? `지금까지의 토론:\n\n${historyText()}\n\n마지막 발언입니다. 논의를 정리하고 종합 의견을 제시하세요.`
             : `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
         }
 
-        const claudeText = await callClaudeWithRetry(claudeSys, claudeUserMsg, claudeModel, anthropicKey, label);
+        let text;
+        if (role === 'gpt') {
+          text = await callGPT(gptSys, userMsg, gptModel, openaiKey);
+        } else if (role === 'gem') {
+          const prompt = `${gemSys}\n\n${userMsg}`;
+          text = await callGeminiWithRetry(prompt, geminiMdl, geminiKey, label);
+        } else {
+          text = await callClaudeWithRetry(claudeSys, userMsg, claudeModel, anthropicKey, label);
+        }
+
         removeLoading();
-        addBubble('claude', claudeText, label);
-        debateHistory.push({ speaker: 'claude', name: participantName('claude', mode), roundLabel: label, text: claudeText });
+        addBubble(role, text, label);
+        debateHistory.push({ speaker: role, name: participantName(role, mode), roundLabel: label, text });
       }
     }
 

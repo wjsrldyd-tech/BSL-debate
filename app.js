@@ -222,6 +222,24 @@ async function callGPT(systemPrompt, userMessage, model, key) {
   return (await res.json()).choices[0].message.content.trim();
 }
 
+function extractJsonObject(raw) {
+  const s = raw.indexOf('{');
+  const e = raw.lastIndexOf('}');
+  if (s === -1 || e === -1 || e <= s) return null;
+  return raw.slice(s, e + 1);
+}
+
+function safeJsonParse(raw) {
+  const trimmed = String(raw || '').trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch (_) {
+    const extracted = extractJsonObject(trimmed);
+    if (!extracted) throw new Error('JSON을 찾을 수 없습니다.');
+    return JSON.parse(extracted);
+  }
+}
+
 function parseGeminiModelSelect(value) {
   const sep = '__';
   const i = value.indexOf(sep);
@@ -801,13 +819,15 @@ async function runFactCheckStep(topic, mode, gptModel, openaiKey) {
   const body = document.getElementById('factCheckBody');
   if (body) body.innerHTML = '<div class="hint">팩트체크 중... (검색 결과를 기반으로 요약합니다)</div>';
 
+  const MAX_FACT_CLAIMS = 5;
+
   const claimExtractorSys = '당신은 토론 기록에서 검증 가능한 사실 주장(팩트)만 뽑는 도우미입니다. 반드시 한국어로, 반드시 JSON만 출력하세요.';
-  const claimExtractorUser = `토론 주제: ${topic}\n토론 방식: ${mode}\n\n토론 기록:\n\n${historyText()}\n\n위 토론에서 \"검증 가능한 주장\"만 최대 8개 뽑으세요.\n규칙:\n- 의견/가치판단/신학적 해석/비유/정서 표현은 제외\n- 수치/연도/법·정책 내용/인용/사건 사실처럼 검색으로 확인 가능한 것만 포함\n- 각 주장마다 검색용 query도 함께 작성\n\n출력 형식(JSON):\n{\n  \"claims\": [\n    { \"claim\": \"...\", \"query\": \"...\", \"priority\": 1 }\n  ]\n}\n`;
+  const claimExtractorUser = `토론 주제: ${topic}\n토론 방식: ${mode}\n\n토론 기록:\n\n${historyText()}\n\n위 토론에서 \"검증 가능한 주장\"만 최대 ${MAX_FACT_CLAIMS}개 뽑으세요.\n규칙:\n- 의견/가치판단/신학적 해석/비유/정서 표현은 제외\n- 수치/연도/법·정책 내용/인용/사건 사실처럼 검색으로 확인 가능한 것만 포함\n- 각 주장마다 검색용 query도 함께 작성\n\n출력 형식(JSON):\n{\n  \"claims\": [\n    { \"claim\": \"...\", \"query\": \"...\", \"priority\": 1 }\n  ]\n}\n`;
 
   let extracted;
   try {
     const raw = await callGPT(claimExtractorSys, claimExtractorUser, gptModel, openaiKey);
-    extracted = JSON.parse(raw);
+    extracted = safeJsonParse(raw);
   } catch (e) {
     if (body) body.innerHTML = `<div class="hint">팩트 추출 실패: ${esc(e.message || String(e))}</div>`;
     return null;
@@ -816,7 +836,7 @@ async function runFactCheckStep(topic, mode, gptModel, openaiKey) {
   const claims = Array.isArray(extracted?.claims) ? extracted.claims : [];
   const topClaims = claims
     .filter(c => c && c.claim && c.query)
-    .slice(0, 8)
+    .slice(0, MAX_FACT_CLAIMS)
     .map(c => ({ claim: String(c.claim).trim(), query: String(c.query).trim(), priority: Number(c.priority || 1) }));
 
   if (topClaims.length === 0) {
@@ -841,8 +861,31 @@ async function runFactCheckStep(topic, mode, gptModel, openaiKey) {
 
   let report;
   try {
-    const raw = await callGPT(judgeSys, judgeUser, gptModel, openaiKey);
-    report = JSON.parse(raw);
+    // 리포트는 길어지기 쉬워 잘림 방지용으로 토큰을 더 넉넉히 씁니다.
+    const raw = await (async () => {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiKey}`,
+        },
+        body: JSON.stringify({
+          model: gptModel,
+          messages: [
+            { role: 'system', content: judgeSys },
+            { role: 'user', content: judgeUser },
+          ],
+          max_completion_tokens: 4096,
+          temperature: 1,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(`ChatGPT 오류: ${err.error?.message || res.status}`);
+      }
+      return (await res.json()).choices[0].message.content.trim();
+    })();
+    report = safeJsonParse(raw);
   } catch (e) {
     if (body) body.innerHTML = `<div class="hint">팩트체크 리포트 생성 실패: ${esc(e.message || String(e))}</div>`;
     return null;

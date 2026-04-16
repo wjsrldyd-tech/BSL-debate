@@ -280,12 +280,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1.1rem;
-  flex: 1 1 auto;
-  overflow-y: auto;
-  min-height: 8rem;
-  /* 긴 회의 시 메시지가 뷰포트를 다 먹지 않도록 상한 — 내부 스크롤로 처리 */
-  max-height: min(52vh, calc(100vh - 15rem));
-  padding-right: 0.35rem;
+  flex: 0 0 auto;
+  /* 메시지 영역을 고정/내부 스크롤로 만들지 않음 (전체 패널 스크롤로 자연스럽게 읽기) */
+  overflow: visible;
+  max-height: none;
 }
 
 .msg-wrap {
@@ -601,6 +599,6 @@ body {
   .msg-wrap.claude { margin-left: 0; max-width: 95%; }
   .msg-wrap { max-width: 95%; }
   .header h1 { font-size: 1.4rem; }
-  .messages { max-height: min(40vh, calc(100vh - 12rem)); }
+  .messages { max-height: none; }
   .debate-area { max-height: calc(100vh - 4.5rem); }
 }

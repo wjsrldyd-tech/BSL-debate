@@ -97,8 +97,16 @@ function participantName(role, mode) {
 /* ────────────────────────────────
    메시지 버블
 ──────────────────────────────── */
+function isNearBottom(el, thresholdPx = 64) {
+  if (!el) return true;
+  const remaining = el.scrollHeight - el.scrollTop - el.clientHeight;
+  return remaining <= thresholdPx;
+}
+
 function addBubble(speaker, text, roundLabel, isLoading = false) {
   const container = document.getElementById('messages');
+  const area = document.getElementById('debateArea');
+  const shouldStick = isNearBottom(area);
   const wrap = document.createElement('div');
   wrap.className = `msg-wrap ${speaker}`;
   if (isLoading) wrap.id = 'loading-bubble';
@@ -117,7 +125,7 @@ function addBubble(speaker, text, roundLabel, isLoading = false) {
     </div>`;
 
   container.appendChild(wrap);
-  wrap.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  if (shouldStick && area) area.scrollTo({ top: area.scrollHeight, behavior: 'smooth' });
   return wrap;
 }
 
@@ -129,6 +137,8 @@ function removeLoading() {
 /** 소장(회의 모드) / 사용자(그 외) 발언 버블 */
 function addUserBubble(text, roundLabel) {
   const container = document.getElementById('messages');
+  const area = document.getElementById('debateArea');
+  const shouldStick = isNearBottom(area);
   const wrap = document.createElement('div');
   wrap.className = 'msg-wrap user';
   const who = participantName('user', currentSessionMode);
@@ -139,7 +149,7 @@ function addUserBubble(text, roundLabel) {
       <div class="bubble-text">${esc(text)}</div>
     </div>`;
   container.appendChild(wrap);
-  wrap.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  if (shouldStick && area) area.scrollTo({ top: area.scrollHeight, behavior: 'smooth' });
   return wrap;
 }
 
@@ -451,6 +461,9 @@ function buildTurnUserMessage({ role, topic, mode, roundIndex, totalRounds }) {
 function scrollConclusionIntoView() {
   const card = document.getElementById('conclusionCard');
   if (!card) return;
+  const area = document.getElementById('debateArea');
+  // 사용자가 위쪽 내용을 읽고 있으면 강제 스크롤로 방해하지 않음
+  if (area && !isNearBottom(area, 140)) return;
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       card.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });

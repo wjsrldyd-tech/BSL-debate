@@ -58,6 +58,9 @@ let currentSessionTopic = '';
 let currentSessionMode = '';
 let currentSessionParticipants3 = false;
 
+/** SerpAPI 검색 결과 캐시: query → results[] — 동일 쿼리 중복 호출 방지 */
+const searchCache = new Map();
+
 /* ────────────────────────────────
    유틸
 ──────────────────────────────── */
@@ -459,20 +462,6 @@ async function runConclusionStep(topic, mode, participants3, gptModel, openaiKey
   document.getElementById('roundDisplay').textContent = '결론 정리 중...';
   addBubble('gpt', '', '결론', true);
 
-  // 결론 직전: 팩트체크 1회 (SerpAPI 검색 + GPT 판정)
-  try {
-    const factCard = document.getElementById('factCheckCard');
-    if (factCard) {
-      factCard.querySelector('h3').textContent = '📎 팩트체크 & 출처';
-      setFactCheckVisible(true);
-    }
-    await runFactCheckStep(topic, mode, gptModel, openaiKey);
-    const factCard2 = document.getElementById('factCheckCard');
-    factCard2?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } catch (_) {
-    // 팩트체크 실패해도 결론은 진행
-  }
-
   let conclusionSystemPrompt;
   let conclusionPrompt;
   if (mode === 'meeting') {
@@ -522,6 +511,7 @@ async function startDebate() {
 
   aborted = false;
   debateHistory = [];
+  searchCache.clear();
 
   document.getElementById('userInterventionCard').style.display = 'none';
   document.getElementById('userRebuttalInput').value = '';
@@ -559,7 +549,12 @@ async function startDebate() {
         if (aborted) break;
 
         addBubble(role, '', label, true);
-        const userMsg = buildTurnUserMessage({ role, topic, mode, roundIndex: r, totalRounds: rounds });
+        updateLoadingText('🔍 검색 중...');
+        const searchCtx = await fetchSearchContext(role, topic, mode);
+        updateLoadingText(LOADING_DOTS_HTML);
+
+        const baseMsg = buildTurnUserMessage({ role, topic, mode, roundIndex: r, totalRounds: rounds });
+        const userMsg = baseMsg + searchCtx;
 
         let text;
         if (role === 'gpt') {
@@ -653,6 +648,9 @@ async function continueAfterUserRebuttal() {
         if (aborted) break;
 
         addBubble(role, '', label, true);
+        updateLoadingText('🔍 검색 중...');
+        const searchCtx = await fetchSearchContext(role, topic, mode);
+        updateLoadingText(LOADING_DOTS_HTML);
 
         let userMsg;
         if (mode === 'meeting') {
@@ -674,6 +672,8 @@ async function continueAfterUserRebuttal() {
             ? `지금까지의 토론:\n\n${historyText()}\n\n마지막 발언입니다. 논의를 정리하고 종합 의견을 제시하세요.`
             : `지금까지의 토론:\n\n${historyText()}\n\n위 내용을 바탕으로 다음 발언을 하세요.`;
         }
+
+        userMsg += searchCtx;
 
         let text;
         if (role === 'gpt') {
@@ -716,6 +716,7 @@ async function continueAfterUserRebuttal() {
 function restart() {
   aborted = true;
   debateHistory = [];
+  searchCache.clear();
   currentSessionTopic = '';
   currentSessionMode = '';
   currentSessionParticipants3 = false;
@@ -739,6 +740,56 @@ const HISTORY_API_BASE = (() => {
 function historyApi(path) {
   return `${HISTORY_API_BASE}${path}`;
 }
+
+/* ────────────────────────────────
+   실시간 웹 검색 (SerpAPI 캐시 래퍼)
+──────────────────────────────── */
+
+/**
+ * 역할·모드별 검색 쿼리 생성 (API 호출 없이 즉시 반환).
+ * 동일 주제에서 역할마다 다른 각도로 검색하되, 라운드가 반복돼도
+ * 동일 쿼리 → 캐시 히트 → SerpAPI 중복 호출 없음.
+ */
+function buildSearchQuery(role, topic, mode) {
+  const angle = mode === 'meeting'
+    ? { gpt: '기획 전략 방안', gem: '현장 사례 실무', claude: '실행 도구 방법론' }
+    : { gpt: '찬반 논거 현황', gem: '실제 사례 근거', claude: '연구 실증 데이터' };
+  const suffix = angle[role] || '';
+  return suffix ? `${topic} ${suffix}` : topic;
+}
+
+function formatSearchSnippet(results, q) {
+  if (!Array.isArray(results) || results.length === 0) return '';
+  const items = results
+    .map((r, i) => `${i + 1}. [${r.title || ''}] (${r.source || r.link || ''})\n   ${r.snippet || ''}`)
+    .join('\n');
+  return `\n\n---\n[웹 검색 참고 자료 — "${q}"]\n${items}\n위 검색 결과를 참고하되, 핵심 논지는 당신의 역할 관점에서 전개하세요.\n---`;
+}
+
+async function fetchSearchContext(role, topic, mode) {
+  const q = buildSearchQuery(role, topic, mode);
+  if (searchCache.has(q)) return formatSearchSnippet(searchCache.get(q), q);
+  try {
+    const res = await fetch(historyApi(`/api/search?q=${encodeURIComponent(q)}`));
+    if (!res.ok) return '';
+    const json = await res.json().catch(() => null);
+    const results = Array.isArray(json?.results) ? json.results : [];
+    searchCache.set(q, results);
+    return formatSearchSnippet(results, q);
+  } catch (_) {
+    return '';
+  }
+}
+
+/** 로딩 버블 안의 텍스트(HTML)를 동적으로 교체 */
+function updateLoadingText(html) {
+  const bubble = document.getElementById('loading-bubble');
+  if (!bubble) return;
+  const el = bubble.querySelector('.bubble-text');
+  if (el) el.innerHTML = html;
+}
+
+const LOADING_DOTS_HTML = '<div class="loading-dots"><span></span><span></span><span></span></div>';
 
 function setFactCheckVisible(visible) {
   const card = document.getElementById('factCheckCard');
